@@ -251,14 +251,14 @@ export async function saveWatchHistoryToDb(params: {
         'https://commondatastorage.googleapis.com/gtv-videos-bucket/sample/TearsOfSteel.mp4'
       ).slice(0, 1000),
       thumbnail: (params.thumbnail || '').slice(0, 1000),
-      uploader: (params.uploader || 'Hybrid Media').slice(0, 200),
+      uploader: (params.uploader || 'AnwerBrowser Media').slice(0, 200),
       duration: Math.max(0, Math.min(86400, Number(params.duration || 60))),
       progressSeconds: Math.max(0, Math.min(86400, Number(params.progressSeconds || 0))),
       quality: (params.quality || '720').slice(0, 20),
       detectedLanguage: (params.detectedLanguage || 'en').slice(0, 20),
       srtArabic: (params.srtArabic || '').slice(0, 30000),
       srtOriginal: (params.srtOriginal || '').slice(0, 30000),
-      deviceName: (params.deviceName || 'Web Browser · Hybrid AI').slice(0, 100),
+      deviceName: (params.deviceName || 'Web Browser · AnwerBrowser').slice(0, 100),
       updatedAt: serverTimestamp(),
     };
 

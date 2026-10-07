@@ -176,7 +176,7 @@ export const FlutterMobileSimulator: React.FC<FlutterMobileSimulatorProps> = ({
                     <Brain className="w-14 h-14 text-[#6366F1]" />
                   </div>
                 </div>
-                <h2 className="mt-4 text-2xl font-bold text-center">Hybrid AI</h2>
+                <h2 className="mt-4 text-2xl font-bold text-center">AnwerBrowser</h2>
                 <p
                   className={`mt-2 text-sm text-center ${
                     isDark ? 'text-slate-400' : 'text-slate-500'

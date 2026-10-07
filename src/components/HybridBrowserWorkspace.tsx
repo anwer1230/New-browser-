@@ -187,7 +187,7 @@ export const HybridBrowserWorkspace: React.FC<HybridBrowserWorkspaceProps> = ({
       {
         id: 'dl_seed_2',
         title: 'دليل استخدام وتصفح الإنترنت بحرية وأمان',
-        filename: 'Hybrid_Browser_Guide.pdf',
+        filename: 'AnwerBrowser_Guide.pdf',
         url: 'https://example.com/guide.pdf',
         downloadUrl: '#',
         fileSize: 2400000,

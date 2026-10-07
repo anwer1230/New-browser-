@@ -724,7 +724,7 @@ export async function processQuery(
 }
 
 // ═══════════════════════════════════════════════════════════
-// 7. Hybrid Browser, Media Search, SRT Generator & Streaming Translation
+// 7. AnwerBrowser, Media Search, SRT Generator & Streaming Translation
 // ═══════════════════════════════════════════════════════════
 export interface SubtitleSegment {
   start: number;
@@ -972,7 +972,7 @@ PersistentKeepalive = 25`;
     groqActive: true,
     firewallRules: [
       { port: '51820/UDP', service: 'WireGuard VPN Tunnel (1Gbps)' },
-      { port: '8000/TCP', service: 'Hybrid AI FastAPI Server' },
+      { port: '8000/TCP', service: 'AnwerBrowser FastAPI Server' },
       { port: '8080/TCP', service: 'AI Media & Translation Server + Open WebUI' },
       { port: '443/TCP', service: 'Nginx HTTPS Reverse Proxy' },
       { port: '22/TCP', service: 'SSH Administration' },
@@ -987,7 +987,7 @@ let activeInfrastructure = buildInfrastructureConfigs();
 // 9. Seed Initial RAG Documents
 // ═══════════════════════════════════════════════════════════
 async function seedInitialDocuments() {
-  const doc1 = `الدليل الكامل لبناء نظام الذكاء الاصطناعي الهجين (Hybrid AI System):
+  const doc1 = `الدليل الكامل لبناء نظام الذكاء الاصطناعي الهجين (AnwerBrowser System):
 يتكون النظام الهجين من موجّه رئيسي (Orchestrator) يعمل بنموذج qwen2.5:7b ويقوم بتحليل طلب المستخدم وتوزيعه على 5 خبراء متخصصين:
 1. خبير النصوص (TEXT): يعمل بنموذج qwen2.5:14b (أو qwen2.5:7b كبديل) للأسئلة العامة والشرح والتلخيص والكتابة الإبداعية.
 2. خبير البرمجة (CODE): يعمل بنموذج deepseek-coder-v2:6.7b لكتابة الأكواد النظيفة وتصحيح الأخطاء البرمجية.
@@ -996,7 +996,7 @@ async function seedInitialDocuments() {
 5. خبير الصوتيات (AUDIO): يعمل بنموذج whisper لتحليل الصوتيات.
 كما تم دمج مفتاح Groq السحابي السريع بشكل ثابت ودائم (llama-3.3-70b-versatile + whisper-large-v3) لضمان عمل النظام بأقصى سرعة.`;
 
-  const doc2 = `متصفح الذكاء الاصطناعي الهجين (Hybrid Browser) + خادم الوسائط والترجمة + WireGuard VPN + Oracle Cloud Free Instance:
+  const doc2 = `متصفح الذكاء الاصطناعي الهجين (AnwerBrowser) + خادم الوسائط والترجمة + WireGuard VPN + Oracle Cloud Free Instance:
 - يعمل الخادم على Oracle Cloud Always Free (VM.Standard.A1.Flex بـ 4 أنوية Ampere و 24GB RAM).
 - يوفر سكريبت setup_wireguard.sh نفق VPN خاص ومجاني عبر WireGuard بسرعة 1Gbps على المنفذ 51820 UDP وعناوين 10.66.66.1/24 و 10.66.66.2/24.
 - يعمل خادم الوسائط (media_server.py) على البحث عبر yt-dlp واستخراج الصوت بواسطة ffmpeg وتفريغه نصيًا عبر Groq whisper-large-v3 وترجمته إلى العربية الفصحى وتوليد ملفات SRT.`;
@@ -1072,7 +1072,7 @@ async function startServer() {
   const healthHandler = (_req: Request, res: Response) => {
     res.json({
       status: 'ok',
-      service: 'Hybrid AI & Media Server (Groq + Oracle + WireGuard)',
+      service: 'AnwerBrowser Media Server (Groq + Oracle + WireGuard)',
       groq: true,
       groq_key_masked: activeInfrastructure.groqKeyMasked,
       media_dir: MEDIA_DIR,
@@ -1255,7 +1255,7 @@ async function startServer() {
   });
 
   // ═══════════════════════════════════════════════════════════
-  // Hybrid Browser & Media Server Endpoints (media_server.py)
+  // AnwerBrowser & Media Server Endpoints (media_server.py)
   // ═══════════════════════════════════════════════════════════
 
   // 1. /api/search — Dynamic Multi-Result Video Search for ANY Query
@@ -1371,7 +1371,7 @@ Return ONLY valid JSON: {"videos": [{"title": "...", "uploader": "...", "duratio
               thumbnail: mediaSample.thumb,
               url: `${mediaSample.stream}?id=${vidId}`,
               stream_url: mediaSample.stream,
-              uploader: String(item.uploader || 'Hybrid Media Network'),
+              uploader: String(item.uploader || 'AnwerBrowser Media Network'),
               view_count: Number(item.view_count) || 185000 + idx * 43000,
               language: 'en',
               segments: segs,
@@ -3383,7 +3383,7 @@ ${snippetsContext}
             thumbnail: sampleStreams[0].thumb,
             url: `${sampleStreams[0].stream}?q=${encodeURIComponent(queryOrUrl)}_1`,
             stream_url: sampleStreams[0].stream,
-            uploader: 'Hybrid Media & Docs',
+            uploader: 'AnwerBrowser Media AnwerBrowser Media Hybrid Media & Docs Docs Docs',
             view_count: 342000,
             language: 'en',
             segments: [
@@ -3989,7 +3989,7 @@ ${webResults.map((w, i) => `${i + 1}. ${w.title_ar} (${w.url}): ${w.snippet_ar}`
           `🔒 [3/6] تفعيل WireGuard VPN على ${activeInfrastructure.endpointIp}:51820...`,
           '🦙 [4/6] تشغيل Ollama والنماذج الخمسة...',
           `🎬 [5/6] تشغيل media_server.py مع مفتاح Groq الدائم (${activeInfrastructure.groqKeyMasked})...`,
-          '✅ [6/6] اكتمل تجهيز خادم Oracle Cloud Free + WireGuard VPN + Hybrid AI بنجاح!',
+          '✅ [6/6] اكتمل تجهيز خادم Oracle Cloud Free + WireGuard VPN + AnwerBrowser بنجاح!',
         ].join('\n'),
       });
       return;
@@ -4085,7 +4085,7 @@ ${webResults.map((w, i) => `${i + 1}. ${w.title_ar} (${w.url}): ${w.snippet_ar}`
   }
 
   app.listen(PORT, '0.0.0.0', () => {
-    addLog('SUCCESS', `🚀 Hybrid AI & Media Server listening on http://0.0.0.0:${PORT}`);
+    addLog('SUCCESS', `🚀 AnwerBrowser Media Server listening on http://0.0.0.0:${PORT}`);
     console.log(`Server running on http://0.0.0.0:${PORT}`);
   });
 }

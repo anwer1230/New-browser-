@@ -20,8 +20,8 @@ export default defineConfig(() => {
         ],
         manifest: {
           id: '/',
-          name: 'Hybrid AI System',
-          short_name: 'HybridAI',
+          name: 'AnwerBrowser',
+          short_name: 'AnwerBrowser',
           description:
             'نظام ذكاء اصطناعي هجين وتصفح ذكي بدون إنترنت مع حماية VPN وتحميل الوسائط',
           theme_color: '#1A73E8',
