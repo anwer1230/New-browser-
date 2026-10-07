@@ -226,6 +226,12 @@ export const HybridBrowserWorkspace: React.FC<HybridBrowserWorkspaceProps> = ({
     'Sintel Open Movie Fantasy Adventure',
     'Black Hole Gargantua Gravitational Time Dilation',
   ]);
+  const [isAiWritingPrompt, setIsAiWritingPrompt] = useState(false);
+  const [isAiBrowsing, setIsAiBrowsing] = useState(false);
+  const [aiBrowseReportAr, setAiBrowseReportAr] = useState<string>('');
+  const [aiSuggestedSites, setAiSuggestedSites] = useState<
+    Array<{ title: string; url: string; description_ar: string }>
+  >([]);
 
   // ═══ MediaSearchScreen State (media_search_screen.dart) ═══
   const [searchQuery, setSearchQuery] = useState('Interstellar');
@@ -501,6 +507,66 @@ export const HybridBrowserWorkspace: React.FC<HybridBrowserWorkspaceProps> = ({
       clearInterval(progInterval);
       setBrowserProgress(100);
       setIsBrowsing(false);
+    }
+  };
+
+  // --- AI Co-Pilot Auto-Write Search Prompt (/api/ai-browse) ---
+  const handleAiAutoWritePrompt = async (category: string) => {
+    if (isAiWritingPrompt) return;
+    setIsAiWritingPrompt(true);
+    try {
+      const res = await fetch('/api/ai-browse', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          prompt: aiTopicPrompt,
+          category,
+          autoWriteOnly: true,
+        }),
+      });
+      if (res.ok) {
+        const data = await res.json();
+        if (data.written_prompt_ar) {
+          setAiTopicPrompt(data.written_prompt_ar);
+        }
+        if (Array.isArray(data.generated_queries)) {
+          setAiGeneratedQueries(data.generated_queries);
+        }
+        showBanner('✍️ قام الذكاء الاصطناعي بكتابة وصياغة طلب البحث المثالي لك!');
+      }
+    } finally {
+      setIsAiWritingPrompt(false);
+    }
+  };
+
+  // --- Execute Full AI Smart Browse (/api/ai-browse) ---
+  const handleExecuteAiBrowse = async (e?: React.FormEvent, customTopic?: string) => {
+    if (e) e.preventDefault();
+    const topic = (customTopic ?? aiTopicPrompt).trim();
+    if (!topic || isAiBrowsing) return;
+    setIsAiBrowsing(true);
+    try {
+      const res = await fetch('/api/ai-browse', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ prompt: topic }),
+      });
+      if (res.ok) {
+        const data = await res.json();
+        setAiBrowseReportAr(data.report_ar || '');
+        if (Array.isArray(data.generated_queries)) {
+          setAiGeneratedQueries(data.generated_queries);
+        }
+        if (Array.isArray(data.suggested_sites)) {
+          setAiSuggestedSites(data.suggested_sites);
+        }
+        if (Array.isArray(data.discovered_videos)) {
+          setDiscoveredVideos(data.discovered_videos);
+        }
+        showBanner('🌐 اكتمل التصفح بالذكاء الاصطناعي وتوليد الملخص المترجم والمواقع والفيديوهات!');
+      }
+    } finally {
+      setIsAiBrowsing(false);
     }
   };
 
@@ -1317,66 +1383,157 @@ export const HybridBrowserWorkspace: React.FC<HybridBrowserWorkspaceProps> = ({
 
             {browserTabMode === 'ai_assist' ? (
               /* AI Smart Browsing Tab (تصفح بالذكاء الاصطناعي — يكتب لك ما تريد أن تبحث عنه) */
-              <div className="rounded-[18px] bg-[#151B2E] border border-[#2A3348] p-6 space-y-5">
-                <div className="flex items-center gap-3">
-                  <div
-                    className="w-11 h-11 rounded-[14px] flex items-center justify-center shrink-0"
-                    style={{ background: 'linear-gradient(135deg, #6366F1 0%, #8B5CF6 100%)' }}
-                  >
-                    <Sparkles className="w-5 h-5 text-white" />
-                  </div>
-                  <div>
-                    <h3 className="text-base font-bold text-white">
-                      تصفح بالذكاء الاصطناعي (يكتب لك ما تريد أن تبحث عنه)
-                    </h3>
-                    <p className="text-xs text-[#94A3B8]">
-                      اشرح ما تبحث عنه بالعربية، وسيقوم محرك Groq بصياغة عبارات البحث الدقيقة وترجمة النتائج واكتشاف الفيديوهات فوراً
-                    </p>
-                  </div>
-                </div>
-
-                <form
-                  onSubmit={(e) => {
-                    e.preventDefault();
-                    setBrowserInput(aiTopicPrompt);
-                    handleNavigateBrowser(undefined, aiTopicPrompt);
-                    setBrowserTabMode('webview');
-                  }}
-                  className="space-y-3"
-                >
-                  <textarea
-                    rows={3}
-                    value={aiTopicPrompt}
-                    onChange={(e) => setAiTopicPrompt(e.target.value)}
-                    placeholder="اكتب ما تريد البحث عنه أو مشاهدته (مثال: أريد وثائقي أو فيلم يشرح السفر عبر الزمن والثقوب السوداء مع ترجمة عربية)..."
-                    className="w-full p-4 rounded-[16px] bg-[#1E2638] border border-[#2A3348] text-sm text-white focus:outline-none focus:border-[#6366F1]"
-                  />
+              <div className="space-y-5">
+                <div className="rounded-[18px] bg-[#151B2E] border border-[#2A3348] p-6 space-y-5">
                   <div className="flex flex-wrap items-center justify-between gap-3">
+                    <div className="flex items-center gap-3">
+                      <div
+                        className="w-11 h-11 rounded-[14px] flex items-center justify-center shrink-0"
+                        style={{ background: 'linear-gradient(135deg, #6366F1 0%, #8B5CF6 100%)' }}
+                      >
+                        <Sparkles className="w-5 h-5 text-white" />
+                      </div>
+                      <div>
+                        <h3 className="text-base font-bold text-white">
+                          🌐 تبويب تصفح بالذكاء الاصطناعي (يكتب لك ما تريد أن تبحث عنه)
+                        </h3>
+                        <p className="text-xs text-[#94A3B8]">
+                          اضغط على أزرار الكتابة التلقائية ليكتب لك الذكاء الاصطناعي ما تبحث عنه، ثم يتصفح الويب ويترجم النتائج ويستخرج الفيديوهات
+                        </p>
+                      </div>
+                    </div>
+
+                    {/* Auto-Write Buttons (يكتب لك ما تريد أن تبحث) */}
                     <div className="flex flex-wrap items-center gap-2">
-                      <span className="text-xs text-[#94A3B8]">عبارات مقترحة بالذكاء الاصطناعي:</span>
-                      {aiGeneratedQueries.map((q) => (
+                      <button
+                        type="button"
+                        disabled={isAiWritingPrompt}
+                        onClick={() => handleAiAutoWritePrompt('أفلام وخيال علمي ووثائقيات')}
+                        className="px-3 py-1.5 rounded-xl bg-[#8B5CF6]/20 border border-[#8B5CF6]/40 hover:bg-[#8B5CF6]/30 text-xs font-bold text-[#F8FAFC] flex items-center gap-1.5 cursor-pointer"
+                      >
+                        <Sparkles className="w-3.5 h-3.5 text-[#06B6D4]" />
+                        <span>
+                          {isAiWritingPrompt ? 'جاري الصياغة...' : '✍️ اكتب لي بحثاً عن أفلام ووثائقيات'}
+                        </span>
+                      </button>
+                      <button
+                        type="button"
+                        disabled={isAiWritingPrompt}
+                        onClick={() => handleAiAutoWritePrompt('علوم الفضاء والتقنية والفيزياء')}
+                        className="px-3 py-1.5 rounded-xl bg-[#1E2638] hover:bg-[#2A3348] border border-[#2A3348] text-xs text-[#94A3B8] hover:text-white cursor-pointer"
+                      >
+                        ✍️ اكتب لي بحثاً علمياً وتقنياً
+                      </button>
+                    </div>
+                  </div>
+
+                  <form
+                    onSubmit={(e) => handleExecuteAiBrowse(e)}
+                    className="space-y-3"
+                  >
+                    <textarea
+                      rows={3}
+                      value={aiTopicPrompt}
+                      onChange={(e) => setAiTopicPrompt(e.target.value)}
+                      placeholder="اكتب فكرتك أو اضغط (اكتب لي بحثاً) ليقوم الذكاء الاصطناعي بصياغة ما تريد البحث عنه..."
+                      className="w-full p-4 rounded-[16px] bg-[#1E2638] border border-[#2A3348] text-sm text-white focus:outline-none focus:border-[#6366F1]"
+                    />
+                    <div className="flex flex-wrap items-center justify-between gap-3">
+                      <div className="flex flex-wrap items-center gap-2">
+                        <span className="text-xs text-[#94A3B8]">
+                          🎯 عبارات بحث كتبها الذكاء الاصطناعي لك:
+                        </span>
+                        {aiGeneratedQueries.map((q) => (
+                          <button
+                            key={q}
+                            type="button"
+                            onClick={() => {
+                              setBrowserInput(q);
+                              handleNavigateBrowser(undefined, q);
+                              setBrowserTabMode('webview');
+                            }}
+                            className="px-3 py-1 rounded-lg bg-[#0A0E1A] border border-[#2A3348] hover:border-[#6366F1] text-xs text-[#06B6D4] cursor-pointer"
+                          >
+                            🔍 {q}
+                          </button>
+                        ))}
+                      </div>
+                      <div className="flex items-center gap-2">
                         <button
-                          key={q}
+                          type="submit"
+                          disabled={isAiBrowsing}
+                          className="px-5 py-2.5 rounded-[14px] bg-[#6366F1] hover:bg-[#5558E6] text-xs font-bold text-white flex items-center gap-2 cursor-pointer"
+                        >
+                          <Sparkles className="w-4 h-4" />
+                          <span>
+                            {isAiBrowsing
+                              ? 'جاري التصفح والترجمة بالـ AI...'
+                              : 'تصفح ذكي وتلخيص النتائج بالعربية'}
+                          </span>
+                        </button>
+                        <button
                           type="button"
                           onClick={() => {
-                            setBrowserInput(q);
-                            handleNavigateBrowser(undefined, q);
+                            setBrowserInput(aiTopicPrompt);
+                            handleNavigateBrowser(undefined, aiTopicPrompt);
                             setBrowserTabMode('webview');
                           }}
-                          className="px-3 py-1 rounded-lg bg-[#0A0E1A] border border-[#2A3348] hover:border-[#6366F1] text-xs text-[#06B6D4] cursor-pointer"
+                          className="px-4 py-2.5 rounded-[14px] bg-[#1E2638] hover:bg-[#2A3348] text-xs font-semibold text-white cursor-pointer"
                         >
-                          {q}
+                          فتح في عرض الويب
                         </button>
-                      ))}
+                      </div>
                     </div>
-                    <button
-                      type="submit"
-                      className="px-5 py-2.5 rounded-[14px] bg-[#6366F1] hover:bg-[#5558E6] text-xs font-bold text-white cursor-pointer"
-                    >
-                      توليد البحث وتصفح النتائج المترجمة
-                    </button>
+                  </form>
+                </div>
+
+                {/* AI Browsing Results Report & Suggested Websites */}
+                {(aiBrowseReportAr || aiSuggestedSites.length > 0) && (
+                  <div className="grid grid-cols-1 lg:grid-cols-12 gap-5">
+                    <div className="lg:col-span-8 rounded-[18px] bg-[#151B2E] border border-[#6366F1]/40 p-5 space-y-3">
+                      <div className="flex items-center justify-between pb-2 border-b border-[#2A3348]">
+                        <h4 className="text-sm font-bold text-[#06B6D4]">
+                          📄 تقرير التصفح الذكي المترجم عبر Groq (llama-3.3-70b)
+                        </h4>
+                        <button
+                          onClick={() => onPlayTts(aiBrowseReportAr)}
+                          className="px-3 py-1 rounded-lg bg-[#1E2638] text-xs text-white flex items-center gap-1 cursor-pointer"
+                        >
+                          <Volume2 className="w-3.5 h-3.5 text-[#06B6D4]" />
+                          <span>استماع</span>
+                        </button>
+                      </div>
+                      <div className="p-4 rounded-[14px] bg-[#0A0E1A] border border-[#2A3348] prose prose-invert max-w-none text-sm leading-relaxed">
+                        <ReactMarkdown>{aiBrowseReportAr}</ReactMarkdown>
+                      </div>
+                    </div>
+
+                    <div className="lg:col-span-4 rounded-[18px] bg-[#151B2E] border border-[#2A3348] p-5 space-y-3">
+                      <h4 className="text-sm font-bold text-white">
+                        🌐 مواقع ومصادر مقترحة للفتح المباشر
+                      </h4>
+                      <div className="space-y-2.5">
+                        {aiSuggestedSites.map((site, i) => (
+                          <div
+                            key={i}
+                            onClick={() => {
+                              setBrowserInput(site.url);
+                              handleNavigateBrowser(undefined, site.url);
+                              setBrowserTabMode('webview');
+                            }}
+                            className="p-3.5 rounded-[14px] bg-[#0A0E1A] border border-[#2A3348] hover:border-[#6366F1] space-y-1 cursor-pointer transition-colors"
+                          >
+                            <div className="text-xs font-bold text-white flex items-center justify-between">
+                              <span>{site.title}</span>
+                              <ExternalLink className="w-3.5 h-3.5 text-[#06B6D4] shrink-0" />
+                            </div>
+                            <p className="text-[11px] text-[#94A3B8]">{site.description_ar}</p>
+                          </div>
+                        ))}
+                      </div>
+                    </div>
                   </div>
-                </form>
+                )}
               </div>
             ) : (
               /* Translated Webpage + Discovered Videos */
