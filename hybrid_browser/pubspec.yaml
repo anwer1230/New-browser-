@@ -18,3 +18,5 @@ dependencies:
   file_picker: ^8.1.4
   url_launcher: ^6.3.1
   provider: ^6.1.2
+  speech_to_text: ^7.0.0
+  permission_handler: ^11.3.1

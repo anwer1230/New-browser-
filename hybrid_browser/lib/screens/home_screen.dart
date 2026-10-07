@@ -5,6 +5,7 @@ import '../widgets/vpn_indicator.dart';
 import '../widgets/quick_action_card.dart';
 import '../widgets/search_bar_widget.dart';
 import '../widgets/recent_item.dart';
+import '../services/voice_search_service.dart';
 import 'browser_screen.dart';
 import 'media_search_screen.dart';
 import 'downloads_screen.dart';
@@ -325,24 +326,53 @@ class _HomeScreenState extends State<HomeScreen>
   }
 
   // ═══════════════════════════════════════════════════════════
-  // شريط البحث
+  // شريط البحث (مع البحث الصوتي الفعلي Speech-to-Text)
   // ═══════════════════════════════════════════════════════════
+  Future<void> _onVoiceSearch() async {
+    final res = await VoiceSearchService.showVoiceSearchSheet(context);
+    if (res == null || !mounted) return;
+
+    final query = (res['normalized_query'] ?? res['transcript'] ?? '')
+        .toString()
+        .trim();
+    if (query.isEmpty) return;
+
+    setState(() {
+      _searchController.text = query;
+      _recentItems.insert(0, {
+        'icon': Icons.mic_rounded,
+        'title': query,
+        'subtitle': 'بحث صوتي ذكي • الآن',
+        'color': AppTheme.secondary,
+      });
+    });
+
+    final intent = (res['intent'] ?? 'video').toString();
+    if (intent == 'web') {
+      Navigator.push(
+        context,
+        MaterialPageRoute(
+          builder: (_) => BrowserScreen(initialUrl: query),
+        ),
+      );
+    } else {
+      Navigator.push(
+        context,
+        MaterialPageRoute(
+          builder: (_) => MediaSearchScreen(initialQuery: query),
+        ),
+      );
+    }
+  }
+
   Widget _buildSearchBar() {
     return Padding(
       padding: const EdgeInsets.fromLTRB(20, 0, 20, 24),
       child: SearchBarWidget(
         controller: _searchController,
         onSearch: _onSearch,
-        onVoice: () {
-          ScaffoldMessenger.of(context).showSnackBar(
-            const SnackBar(content: Text('🎙️ البحث الصوتي قريبًا')),
-          );
-        },
-        onScan: () {
-          ScaffoldMessenger.of(context).showSnackBar(
-            const SnackBar(content: Text('📷 مسح QR قريبًا')),
-          );
-        },
+        onVoice: _onVoiceSearch,
+        onScan: _openVpn,
       ),
     );
   }

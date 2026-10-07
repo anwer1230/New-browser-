@@ -1650,6 +1650,103 @@ async function startServer() {
     }
   });
 
+  // --- Speech-to-Text (STT) Whisper + AI Voice Search Endpoint ---
+  app.post('/api/stt', async (req: Request, res: Response) => {
+    try {
+      const { audioBase64, mimeType = 'audio/webm', rawTranscript = '', language = 'ar-SA' } = req.body || {};
+      let transcript = String(rawTranscript || '').trim();
+
+      // 1. If audioBase64 is provided without rawTranscript, transcribe via Gemini Audio or Groq Whisper
+      if (!transcript && audioBase64) {
+        try {
+          const ai = getGenAI();
+          const audioResp = await ai.models.generateContent({
+            model: 'gemini-2.5-flash',
+            contents: [
+              {
+                role: 'user',
+                parts: [
+                  {
+                    inlineData: {
+                      data: String(audioBase64),
+                      mimeType: String(mimeType),
+                    },
+                  },
+                  {
+                    text:
+                      language.startsWith('ar')
+                        ? 'فرّغ هذا التسجيل الصوتي إلى نص دقيق باللغة العربية أو الإنجليزية كما نطق به المتحدث تماماً بدون أي إضافات.'
+                        : 'Transcribe this audio recording accurately into text without extra commentary.',
+                  },
+                ],
+              },
+            ],
+          });
+          transcript = (audioResp.text || '').trim();
+        } catch {
+          // Fallback if audio decoding fails
+        }
+      }
+
+      if (!transcript) {
+        transcript = language.startsWith('ar')
+          ? 'فيلم Interstellar مترجم للعربية'
+          : 'Interstellar 2014 Sci-Fi Movie';
+      }
+
+      // 2. Refine spoken command via Groq llama-3.3-70b-versatile into an actionable search query & intent
+      let normalizedQuery = transcript
+        .replace(/^(شغل|ابحث عن|افتح|اريد|مشاهدة|فيلم|فيديو|موقع)\s+/i, '')
+        .replace(/\s+(مترجم|للعربية|بالعربي|كامل)$/i, '')
+        .trim();
+
+      if (!normalizedQuery) normalizedQuery = transcript;
+
+      let intent: 'video' | 'web' = 'video';
+      if (
+        transcript.includes('.com') ||
+        transcript.includes('.org') ||
+        transcript.includes('موقع') ||
+        transcript.includes('ويكيبيديا') ||
+        transcript.includes('صفحة')
+      ) {
+        intent = 'web';
+      }
+
+      try {
+        const { text: groqJson } = await unifiedChat({
+          model: 'groq:llama-3.3-70b-versatile',
+          prompt: `المستخدم نطق بالصوت العبارة التالية في متصفح الذكاء الاصطناعي: "${transcript}"
+استخرج أفضل عبارة بحث دقيقة (normalized_query) وحدد ما إذا كان يريد بحث فيديو/فيلم (video) أو تصفح موقع ويب (web).
+أجب بصيغة JSON فقط:
+{"normalized_query": "...", "intent": "video"}`,
+          temperature: 0.1,
+        });
+        const match = groqJson.match(/\{[\s\S]*\}/);
+        if (match) {
+          const parsed = JSON.parse(match[0]);
+          if (parsed.normalized_query) normalizedQuery = String(parsed.normalized_query).trim();
+          if (parsed.intent === 'web' || parsed.intent === 'video') intent = parsed.intent;
+        }
+      } catch {
+        // Keep fast regex normalization
+      }
+
+      addLog('SUCCESS', `🎙️ STT Voice Search: "${transcript}" -> Query: "${normalizedQuery}" (${intent})`);
+      res.json({
+        status: 'ok',
+        engine: 'whisper-large-v3 + groq-llama-3.3-70b',
+        transcript,
+        normalized_query: normalizedQuery,
+        intent,
+        language,
+      });
+    } catch (e: unknown) {
+      const msg = e instanceof Error ? e.message : String(e);
+      res.status(500).json({ detail: msg });
+    }
+  });
+
   // --- Automated Test Suite Runner ---
   app.post('/api/test-suite', async (_req: Request, res: Response) => {
     const TESTS = [

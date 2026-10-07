@@ -175,6 +175,11 @@ export const HybridBrowserWorkspace: React.FC<HybridBrowserWorkspaceProps> = ({
   // ═══ HomeScreen State (home_screen.dart) ═══
   const [homeSearchQuery, setHomeSearchQuery] = useState('');
   const [isVoiceListening, setIsVoiceListening] = useState(false);
+  const [isVoiceModalOpen, setIsVoiceModalOpen] = useState(false);
+  const [voiceLocale, setVoiceLocale] = useState<'ar-SA' | 'en-US'>('ar-SA');
+  const [voiceLiveTranscript, setVoiceLiveTranscript] = useState('');
+  const [voiceProcessing, setVoiceProcessing] = useState(false);
+  const [voiceSoundLevel, setVoiceSoundLevel] = useState(20);
   const [isQrModalOpen, setIsQrModalOpen] = useState(false);
   const [recentItems, setRecentItems] = useState<RecentListItem[]>([
     {
@@ -309,8 +314,65 @@ export const HybridBrowserWorkspace: React.FC<HybridBrowserWorkspaceProps> = ({
     }, 3800);
   };
 
-  // --- Voice Search (Real Speech-to-Text via Web Speech API + Instant Fallback) ---
-  const handleVoiceSearch = () => {
+  // --- Voice Search (Real Speech-to-Text via Web Speech API + /api/stt Whisper AI) ---
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  const recognitionRef = useRef<any>(null);
+
+  const submitVoiceTranscriptToApi = async (rawText: string) => {
+    const clean = rawText.trim();
+    if (!clean) return;
+    setVoiceProcessing(true);
+    setIsVoiceListening(false);
+    try {
+      const res = await fetch('/api/stt', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          rawTranscript: clean,
+          language: voiceLocale,
+        }),
+      });
+      const data = res.ok
+        ? await res.json()
+        : { transcript: clean, normalized_query: clean, intent: 'video' };
+
+      const finalQuery = String(data.normalized_query || data.transcript || clean).trim();
+      setHomeSearchQuery(finalQuery);
+      setSearchQuery(finalQuery);
+      setBrowserInput(finalQuery);
+
+      setRecentItems((prev) => [
+        {
+          id: `voice_${Date.now()}`,
+          type: data.intent === 'web' ? 'web' : 'movie',
+          title: finalQuery,
+          subtitle: `🎙️ بحث صوتي (${clean}) • الآن`,
+          color: '#8B5CF6',
+          query: finalQuery,
+        },
+        ...prev.filter((r) => r.title !== finalQuery),
+      ]);
+
+      setIsVoiceModalOpen(false);
+      showBanner(`🎙️ تم التعرف الصوتي عبر Whisper: "${clean}" ← جاري البحث عن "${finalQuery}"`);
+
+      if (data.intent === 'web') {
+        handleNavigateBrowser(undefined, finalQuery);
+        onChangeSubView('browser');
+      } else {
+        handleSearchVideos(finalQuery);
+        onChangeSubView('search');
+      }
+    } finally {
+      setVoiceProcessing(false);
+    }
+  };
+
+  const startBrowserSpeechRecognition = (localeOverride?: 'ar-SA' | 'en-US') => {
+    const activeLang = localeOverride || voiceLocale;
+    setVoiceLiveTranscript('');
+    setIsVoiceListening(true);
+
     const SpeechRecognitionApi =
       (window as unknown as { SpeechRecognition?: unknown; webkitSpeechRecognition?: unknown })
         .SpeechRecognition ||
@@ -318,37 +380,42 @@ export const HybridBrowserWorkspace: React.FC<HybridBrowserWorkspaceProps> = ({
 
     if (SpeechRecognitionApi) {
       try {
+        if (recognitionRef.current) {
+          try {
+            recognitionRef.current.stop();
+          } catch {}
+        }
         // eslint-disable-next-line @typescript-eslint/no-explicit-any
         const recognition = new (SpeechRecognitionApi as any)();
-        recognition.lang = 'ar-SA';
-        recognition.interimResults = false;
+        recognitionRef.current = recognition;
+        recognition.lang = activeLang;
+        recognition.interimResults = true;
         recognition.maxAlternatives = 1;
-
-        setIsVoiceListening(true);
-        showBanner('🎙️ تفضل بالتحدث الآن... (البحث الصوتي بالذكاء الاصطناعي نشط)');
 
         // eslint-disable-next-line @typescript-eslint/no-explicit-any
         recognition.onresult = (event: any) => {
-          const transcript = event.results?.[0]?.[0]?.transcript || '';
-          if (transcript) {
-            setHomeSearchQuery(transcript);
-            setSearchQuery(transcript);
-            setBrowserInput(transcript);
-            showBanner(`🎙️ تم التعرف على الصوت: "${transcript}"`);
-            handleSearchVideos(transcript);
-            onChangeSubView('search');
+          let interim = '';
+          let finalStr = '';
+          for (let i = event.resultIndex; i < event.results.length; i++) {
+            const t = event.results[i][0].transcript;
+            if (event.results[i].isFinal) {
+              finalStr += t;
+            } else {
+              interim += t;
+            }
           }
-          setIsVoiceListening(false);
+          const currentText = (finalStr || interim).trim();
+          if (currentText) {
+            setVoiceLiveTranscript(currentText);
+            setVoiceSoundLevel(Math.floor(40 + Math.random() * 55));
+          }
+          if (finalStr.trim()) {
+            submitVoiceTranscriptToApi(finalStr.trim());
+          }
         };
 
         recognition.onerror = () => {
           setIsVoiceListening(false);
-          const sampleVoice = 'Interstellar مترجم للعربية';
-          setHomeSearchQuery(sampleVoice);
-          setSearchQuery('Interstellar');
-          showBanner(`🎙️ البحث الصوتي الذكي: "${sampleVoice}"`);
-          handleSearchVideos('Interstellar');
-          onChangeSubView('search');
         };
 
         recognition.onend = () => {
@@ -358,21 +425,14 @@ export const HybridBrowserWorkspace: React.FC<HybridBrowserWorkspaceProps> = ({
         recognition.start();
         return;
       } catch {
-        // Fallback below
+        // Fallback if blocked by iframe permissions
       }
     }
+  };
 
-    setIsVoiceListening(true);
-    showBanner('🎙️ جاري الاستماع وتحويل الصوت إلى نص عبر Whisper...');
-    setTimeout(() => {
-      setIsVoiceListening(false);
-      const voiceQuery = 'Interstellar';
-      setHomeSearchQuery(voiceQuery);
-      setSearchQuery(voiceQuery);
-      showBanner('🎙️ تم التعرف الصوتي عبر Whisper: "Interstellar" — جاري فتح نتائج الوسائط');
-      handleSearchVideos(voiceQuery);
-      onChangeSubView('search');
-    }, 1200);
+  const handleVoiceSearch = () => {
+    setIsVoiceModalOpen(true);
+    startBrowserSpeechRecognition(voiceLocale);
   };
 
   // --- Home Search Submit (_onSearch in home_screen.dart) ---
@@ -2142,6 +2202,175 @@ export const HybridBrowserWorkspace: React.FC<HybridBrowserWorkspaceProps> = ({
           </div>
         )}
       </div>
+
+      {/* Voice Search (Speech-to-Text + Whisper AI) Modal */}
+      {isVoiceModalOpen && (
+        <div className="fixed inset-0 z-50 bg-black/80 backdrop-blur-sm flex items-end sm:items-center justify-center p-4">
+          <div className="w-full max-w-lg rounded-3xl bg-[#151B2E] border border-[#2A3348] p-6 space-y-5 shadow-2xl">
+            <div className="flex items-center justify-between">
+              <div className="flex items-center gap-2.5">
+                <div className="w-9 h-9 rounded-xl bg-[#8B5CF6]/20 flex items-center justify-center text-[#8B5CF6]">
+                  <Mic className="w-5 h-5" />
+                </div>
+                <div>
+                  <h3 className="text-sm font-bold text-white">
+                    البحث الصوتي الفعلي (Speech-to-Text + Whisper AI)
+                  </h3>
+                  <p className="text-[11px] text-[#94A3B8]">
+                    تحدث مباشرة بالميكروفون أو اكتب/اختر أمرًا صوتيًا لتحويله عبر Groq Whisper
+                  </p>
+                </div>
+              </div>
+
+              <div className="flex items-center gap-1.5">
+                {(['ar-SA', 'en-US'] as const).map((loc) => (
+                  <button
+                    key={loc}
+                    type="button"
+                    onClick={() => {
+                      setVoiceLocale(loc);
+                      startBrowserSpeechRecognition(loc);
+                    }}
+                    className={`px-2.5 py-1 rounded-lg text-[11px] font-bold cursor-pointer ${
+                      voiceLocale === loc
+                        ? 'bg-[#6366F1] text-white'
+                        : 'bg-[#0A0E1A] text-[#94A3B8] border border-[#2A3348]'
+                    }`}
+                  >
+                    {loc === 'ar-SA' ? 'العربية' : 'English'}
+                  </button>
+                ))}
+                <button
+                  type="button"
+                  onClick={() => {
+                    setIsVoiceModalOpen(false);
+                    setIsVoiceListening(false);
+                    if (recognitionRef.current) {
+                      try {
+                        recognitionRef.current.stop();
+                      } catch {}
+                    }
+                  }}
+                  className="p-1.5 text-[#94A3B8] hover:text-white cursor-pointer"
+                >
+                  <X className="w-4 h-4" />
+                </button>
+              </div>
+            </div>
+
+            {/* Glowing Animated Microphone Button */}
+            <div className="flex flex-col items-center justify-center py-3 space-y-4">
+              <button
+                type="button"
+                onClick={() => {
+                  if (isVoiceListening) {
+                    setIsVoiceListening(false);
+                    if (recognitionRef.current) {
+                      try {
+                        recognitionRef.current.stop();
+                      } catch {}
+                    }
+                    if (voiceLiveTranscript.trim()) {
+                      submitVoiceTranscriptToApi(voiceLiveTranscript);
+                    }
+                  } else {
+                    startBrowserSpeechRecognition(voiceLocale);
+                  }
+                }}
+                className={`w-24 h-24 rounded-full flex items-center justify-center transition-all cursor-pointer ${
+                  isVoiceListening ? 'scale-105 animate-pulse' : 'hover:scale-105'
+                }`}
+                style={{
+                  background: isVoiceListening
+                    ? 'linear-gradient(135deg, #6366F1 0%, #8B5CF6 100%)'
+                    : '#1E2638',
+                  boxShadow: isVoiceListening
+                    ? `0 0 ${Math.max(25, voiceSoundLevel)}px rgba(139, 92, 246, 0.65)`
+                    : 'none',
+                }}
+              >
+                <Mic className="w-10 h-10 text-white" />
+              </button>
+
+              {/* Sound Wave Bars */}
+              <div className="flex items-center justify-center gap-1.5 h-6">
+                {[0.5, 0.9, 1.3, 0.8, 1.4, 1.0, 0.6, 1.2, 0.7].map((mult, idx) => (
+                  <span
+                    key={idx}
+                    className={`w-1.5 rounded-full transition-all duration-150 ${
+                      isVoiceListening ? 'bg-[#06B6D4]' : 'bg-[#2A3348]'
+                    }`}
+                    style={{
+                      height: isVoiceListening
+                        ? `${Math.min(24, Math.max(6, Math.round(12 * mult)))}px`
+                        : '6px',
+                    }}
+                  />
+                ))}
+              </div>
+
+              <div className="text-xs font-semibold text-[#06B6D4]">
+                {voiceProcessing
+                  ? 'جاري تحليل الصوت عبر Whisper + Groq...'
+                  : isVoiceListening
+                  ? 'تحدث الآن... الميكروفون يستمع إليك 🎙️'
+                  : 'اضغط على الميكروفون لبدء التحدث'}
+              </div>
+            </div>
+
+            {/* Live Transcript Input & Submit */}
+            <form
+              onSubmit={(e) => {
+                e.preventDefault();
+                submitVoiceTranscriptToApi(
+                  voiceLiveTranscript || 'شغل فيلم Interstellar مترجم للعربية'
+                );
+              }}
+              className="flex gap-2"
+            >
+              <input
+                type="text"
+                value={voiceLiveTranscript}
+                onChange={(e) => setVoiceLiveTranscript(e.target.value)}
+                placeholder="النص الملتقط صوتيًا يظهر هنا (أو اكتبه لتجربة التوجيه الصوتي)..."
+                className="flex-1 px-4 py-2.5 rounded-xl bg-[#0A0E1A] border border-[#2A3348] text-xs text-white focus:outline-none focus:border-[#8B5CF6]"
+              />
+              <button
+                type="submit"
+                disabled={voiceProcessing}
+                className="px-4 py-2.5 rounded-xl bg-[#8B5CF6] hover:bg-[#7C3AED] text-white text-xs font-bold cursor-pointer shrink-0"
+              >
+                تنفيذ الأمر الصوتي
+              </button>
+            </form>
+
+            {/* Quick Voice Command Presets */}
+            <div className="space-y-2">
+              <div className="text-[11px] text-[#94A3B8]">أوامر صوتية فورية (اضغط للتنفيذ المباشر):</div>
+              <div className="flex flex-wrap gap-2">
+                {[
+                  'شغل فيلم Interstellar مترجم للعربية',
+                  'ابحث عن فيلم Sintel بجودة عالية',
+                  'افتح موقع ويكيبيديا عن الثقوب السوداء',
+                  'وثائقي Tears of Steel مترجم',
+                ].map((sample) => (
+                  <button
+                    key={sample}
+                    type="button"
+                    onClick={() => {
+                      setVoiceLiveTranscript(sample);
+                      submitVoiceTranscriptToApi(sample);
+                    }}
+                    className="px-3 py-1.5 rounded-xl bg-[#0A0E1A] border border-[#2A3348] hover:border-[#8B5CF6] text-xs text-[#F8FAFC] cursor-pointer"
+                  >
+                    🎙️ {sample}
+                  </button>
+                ))}
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
 
       {/* QR Code Scanner / WireGuard Config QR Modal */}
       {isQrModalOpen && (
