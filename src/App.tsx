@@ -149,7 +149,7 @@ export default function App() {
 
   return (
     <div
-      className="h-screen w-screen overflow-hidden flex flex-col bg-[#F8F9FA] text-[#202124]"
+      className="h-[100dvh] min-h-[100dvh] w-full max-w-full overflow-hidden flex flex-col bg-[#F8F9FA] text-[#202124]"
       style={{ fontFamily: "'Cairo', 'Segoe UI', Tahoma, sans-serif" }}
     >
       {/* إشعار تثبيت التطبيق PWA مثل AI Studio */}

@@ -33,6 +33,7 @@ import {
   Zap,
   WifiOff,
   AlertTriangle,
+  ExternalLink,
 } from 'lucide-react';
 import { User } from 'firebase/auth';
 import {
@@ -225,6 +226,7 @@ export const HybridBrowserWorkspace: React.FC<HybridBrowserWorkspaceProps> = ({
   });
 
   const [showSlowNetworkAlert, setShowSlowNetworkAlert] = useState<boolean>(false);
+  const [alertDismissedByUser, setAlertDismissedByUser] = useState<boolean>(false);
   const [networkMetrics, setNetworkMetrics] = useState<{
     effectiveType?: string;
     downlink?: number;
@@ -235,7 +237,7 @@ export const HybridBrowserWorkspace: React.FC<HybridBrowserWorkspaceProps> = ({
   // مخزن ذاكرة سريع جداً لحفظ اللقطات الفورية والانتقال في 0 مللي ثانية (100x Speedup)
   const pageCacheRef = useRef<Map<string, { title: string; text?: string; html?: string }>>(new Map());
 
-  // مراقبة جودة وسرعة الاتصال في الخلفية والتنبيه الذكي عند البطء الشديد
+  // مراقبة جودة وسرعة الاتصال في الخلفية والتنبيه الذكي عند البطء الشديد (مع تجنب الإنذار الخاطئ عند الإقلاع)
   useEffect(() => {
     let isCancelled = false;
 
@@ -256,39 +258,44 @@ export const HybridBrowserWorkspace: React.FC<HybridBrowserWorkspaceProps> = ({
         if (
           effectiveType === '2g' ||
           effectiveType === 'slow-2g' ||
-          downlink < 0.8 ||
-          rtt > 650 ||
+          downlink < 0.6 ||
+          rtt > 800 ||
           conn.saveData
         ) {
           isSlow = true;
         }
       }
 
-      // 2. فحص وضع عدم الاتصال (Offline)
-      if (!navigator.onLine) {
+      // 2. فحص وضع عدم الاتصال الحقيقي
+      if (typeof navigator !== 'undefined' && !navigator.onLine) {
         isSlow = true;
         effectiveType = 'offline';
         downlink = 0;
       }
 
       // 3. قياس زمن الاستجابة الفعلي (Active Latency Ping)
-      if (navigator.onLine && !isSlow) {
+      if (typeof navigator !== 'undefined' && navigator.onLine) {
         try {
           const t0 = performance.now();
-          const pingRes = await fetch('/api/health', { method: 'HEAD', cache: 'no-store' });
+          const pingRes = await fetch('/api/health', { cache: 'no-store' });
           const latency = performance.now() - t0;
-          if (pingRes.ok && latency > 900) {
-            isSlow = true;
-            rtt = Math.round(latency);
+          if (pingRes.ok) {
+            if (latency > 2000) {
+              isSlow = true;
+              rtt = Math.round(latency);
+            }
           }
         } catch {
-          isSlow = true;
+          if (!navigator.onLine) {
+            isSlow = true;
+            effectiveType = 'offline';
+          }
         }
       }
 
       if (!isCancelled) {
         setNetworkMetrics({ effectiveType, downlink, rtt, isSlow });
-        if (isSlow && !dataSaverEnabled) {
+        if (isSlow && !dataSaverEnabled && !alertDismissedByUser) {
           setShowSlowNetworkAlert(true);
         } else if (!isSlow) {
           setShowSlowNetworkAlert(false);
@@ -296,8 +303,9 @@ export const HybridBrowserWorkspace: React.FC<HybridBrowserWorkspaceProps> = ({
       }
     };
 
-    checkNetworkSpeed();
-    const interval = setInterval(checkNetworkSpeed, 10000);
+    // تأخير أول فحص 3.5 ثوانٍ بعد إقلاع التطبيق لتفادي الإنذار الخاطئ أثناء تهيئة الجوال
+    const bootTimer = setTimeout(checkNetworkSpeed, 3500);
+    const interval = setInterval(checkNetworkSpeed, 15000);
 
     // @ts-expect-error navigator.connection
     const conn = navigator.connection || navigator.mozConnection || navigator.webkitConnection;
@@ -309,12 +317,13 @@ export const HybridBrowserWorkspace: React.FC<HybridBrowserWorkspaceProps> = ({
 
     return () => {
       isCancelled = true;
+      clearTimeout(bootTimer);
       clearInterval(interval);
       if (conn) conn.removeEventListener('change', checkNetworkSpeed);
       window.removeEventListener('online', checkNetworkSpeed);
       window.removeEventListener('offline', checkNetworkSpeed);
     };
-  }, [dataSaverEnabled]);
+  }, [dataSaverEnabled, alertDismissedByUser]);
 
   const toggleDataSaver = (enable?: boolean) => {
     const next = enable !== undefined ? enable : !dataSaverEnabled;
@@ -1277,6 +1286,13 @@ export const HybridBrowserWorkspace: React.FC<HybridBrowserWorkspaceProps> = ({
             onBlur={() => {
               setTimeout(() => setUrlFocused(false), 150);
             }}
+            onKeyDown={(e) => {
+              if (e.key === 'Enter') {
+                e.preventDefault();
+                navigateTo(urlInput);
+                urlInputRef.current?.blur();
+              }
+            }}
             onChange={(e) => setUrlInput(e.target.value)}
             placeholder="ابحث في Google أو اكتب عنوان موقع ويب"
             className={`flex-1 bg-transparent text-[13px] sm:text-[14px] focus:outline-none dir-ltr text-left font-mono truncate ${
@@ -1300,6 +1316,16 @@ export const HybridBrowserWorkspace: React.FC<HybridBrowserWorkspaceProps> = ({
               <X className="w-3.5 h-3.5" />
             </button>
           )}
+
+          {/* زر انتقال مخصص للجوال والأجهزة اللمسية */}
+          <button
+            type="submit"
+            className="h-7 px-2.5 rounded-full bg-blue-600 hover:bg-blue-700 text-white font-bold text-[11px] sm:text-xs flex items-center gap-1 cursor-pointer transition shadow-xs shrink-0"
+            title="انتقال إلى الرابط أو البحث"
+          >
+            <span>انتقال</span>
+            <ArrowLeft className="w-3 h-3" />
+          </button>
 
           {/* زر البحث الصوتي */}
           <button
@@ -1420,6 +1446,26 @@ export const HybridBrowserWorkspace: React.FC<HybridBrowserWorkspaceProps> = ({
             )}
           </button>
 
+          {/* زر فتح الرابط في نافذة جديدة مباشرة */}
+          <button
+            type="button"
+            onClick={() => {
+              if (activeTab.url && activeTab.url.startsWith('http')) {
+                window.open(activeTab.url, '_blank', 'noopener,noreferrer');
+              } else {
+                showSnack('الرجاء كتابة رابط موقع أولاً');
+              }
+            }}
+            className={`p-2 rounded-full transition-colors cursor-pointer ${
+              darkMode
+                ? 'text-[#E8EAED] hover:bg-[#303134]'
+                : 'text-[#5F6368] hover:bg-[#E8EAED]/60'
+            }`}
+            title="فتح الموقع مباشرة في تبويب جديد (إذا تعذر العرض في الإطار)"
+          >
+            <ExternalLink className="w-[18px] h-[18px]" />
+          </button>
+
           {/* زر القائمة الثلاثية (⋮) */}
           <button
             type="button"
@@ -1479,7 +1525,10 @@ export const HybridBrowserWorkspace: React.FC<HybridBrowserWorkspaceProps> = ({
             </button>
             <button
               type="button"
-              onClick={() => setShowSlowNetworkAlert(false)}
+              onClick={() => {
+                setShowSlowNetworkAlert(false);
+                setAlertDismissedByUser(true);
+              }}
               className="p-1 rounded-lg hover:bg-black/5 dark:hover:bg-white/10 text-gray-500 cursor-pointer"
               title="تجاهل"
             >
@@ -1523,29 +1572,61 @@ export const HybridBrowserWorkspace: React.FC<HybridBrowserWorkspaceProps> = ({
             darkMode={darkMode}
           />
         ) : (
-          <div className="flex-1 w-full relative bg-white overflow-hidden">
+          <div className="flex-1 w-full relative bg-white dark:bg-[#202124] overflow-hidden">
+            {/* مؤشر التحميل المرئي الأنيق أثناء جلب الصفحة */}
+            {loading && (
+              <div className="absolute inset-0 bg-white/80 dark:bg-[#202124]/80 backdrop-blur-[1px] z-20 flex flex-col items-center justify-center pointer-events-none transition-all">
+                <div className="w-9 h-9 border-3 border-blue-600 border-t-transparent rounded-full animate-spin mb-2" />
+                <span className="text-xs font-bold text-gray-700 dark:text-gray-200">
+                  جاري تحميل الصفحة...
+                </span>
+                <span className="text-[11px] text-gray-500 dark:text-gray-400 mt-0.5 dir-ltr font-mono truncate max-w-[85%]">
+                  {activeTab.url}
+                </span>
+              </div>
+            )}
+
+            {/* زر عائم سريع للفتح المباشر في حال واجه المستخدم موقعاً يمنع التضمين */}
+            {activeTab.url && activeTab.url.startsWith('http') && !activeTab.url.includes('google.com') && (
+              <div className="absolute top-2 left-2 z-10 opacity-60 hover:opacity-100 transition-opacity">
+                <a
+                  href={activeTab.url}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="px-2.5 py-1 rounded-full bg-black/70 hover:bg-black text-white text-[10px] font-bold flex items-center gap-1 shadow-xs backdrop-blur-xs transition"
+                  title="فتح الموقع مباشرة في تبويب متصفح مستقل"
+                >
+                  <span>فتح مباشر ↗</span>
+                </a>
+              </div>
+            )}
+
             {activeTab.offlineHtml ? (
               <iframe
                 ref={iframeRef}
                 title={activeTab.title || 'Offline Reader'}
                 srcDoc={activeTab.offlineHtml}
-                className="w-full h-full border-0 bg-white"
-                sandbox="allow-scripts allow-same-origin allow-forms allow-presentation allow-downloads"
-                allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture"
+                className="w-full h-full border-0 bg-white dark:bg-[#202124]"
+                sandbox="allow-scripts allow-same-origin allow-forms allow-popups allow-modals allow-presentation allow-downloads allow-pointer-lock allow-orientation-lock"
+                allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture; web-share; fullscreen"
               />
             ) : (
               <iframe
                 ref={iframeRef}
                 key={`${activeTab.id}_${activeTab.url}_${autoTranslate}`}
-                title={activeTab.title || 'Chrome WebView'}
+                title={activeTab.title || 'AnwerBrowser WebView'}
                 src={proxyIframeSrc}
-                sandbox="allow-scripts allow-same-origin allow-forms allow-presentation allow-downloads"
-                allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture"
+                sandbox="allow-scripts allow-same-origin allow-forms allow-popups allow-modals allow-presentation allow-downloads allow-pointer-lock allow-orientation-lock"
+                allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture; web-share; fullscreen"
                 onLoad={() => {
                   setLoading(false);
                   setProgress(1);
                 }}
-                className="w-full h-full border-0 bg-white"
+                onError={() => {
+                  setLoading(false);
+                  setProgress(1);
+                }}
+                className="w-full h-full border-0 bg-white dark:bg-[#202124]"
               />
             )}
           </div>

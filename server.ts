@@ -1104,6 +1104,11 @@ async function startServer() {
   };
   app.get('/health', healthHandler);
   app.get('/api/health', healthHandler);
+  const healthHeadHandler = (_req: Request, res: Response) => {
+    res.status(200).end();
+  };
+  app.head('/health', healthHeadHandler);
+  app.head('/api/health', healthHeadHandler);
 
   // --- Infrastructure & Approval Provisioning Endpoints ---
   app.get('/api/infrastructure', (_req: Request, res: Response) => {
@@ -2290,12 +2295,16 @@ ${rawText.slice(0, 12000)}`;
 
     const cacheKey = `${targetUrl}__tr${autoTranslate ? '1' : '0'}__ds${dataSaver ? '1' : '0'}`;
 
+    // Ensure proxy response is unconditionally embeddable across mobile webviews & iframes
+    res.removeHeader('X-Frame-Options');
+    res.removeHeader('Content-Security-Policy');
+    res.setHeader('Content-Security-Policy', "frame-ancestors *");
+    res.setHeader('Access-Control-Allow-Origin', '*');
+
     // ⚡ 100x Ultra-Fast Cache Hit: Serve directly from RAM in 0ms
     if (PROXY_CACHE.has(cacheKey)) {
       const cached = PROXY_CACHE.get(cacheKey);
       if (cached && Date.now() - cached.timestamp < PROXY_CACHE_TTL_MS) {
-        res.removeHeader('X-Frame-Options');
-        res.removeHeader('Content-Security-Policy');
         res.setHeader('Content-Type', 'text/html; charset=utf-8');
         res.setHeader('X-Proxy-Cache', 'HIT');
         res.setHeader('Cache-Control', 'public, max-age=3600, stale-while-revalidate=86400');
@@ -2831,7 +2840,7 @@ ${rawText.slice(0, 12000)}`;
     try {
       const parsedOrigin = new URL(targetUrl);
       const controller = new AbortController();
-      const timeout = setTimeout(() => controller.abort(), 7500);
+      const timeout = setTimeout(() => controller.abort(), 14000);
       const upstream = await fetch(targetUrl, {
         headers: {
           'User-Agent':
@@ -3096,19 +3105,46 @@ ${rawText.slice(0, 12000)}`;
               </div>`
           )
           .join('');
+        res.removeHeader('X-Frame-Options');
+        res.removeHeader('Content-Security-Policy');
+        res.setHeader('Content-Security-Policy', "frame-ancestors *");
         res.setHeader('Content-Type', 'text/html; charset=utf-8');
         res.send(`<!DOCTYPE html>
 <html dir="rtl" lang="ar">
-<head><meta charset="utf-8"><title>${targetUrl}</title></head>
-<body style="font-family:system-ui,sans-serif;max-width:760px;margin:0 auto;padding:24px;color:#202124;background:#fff;">
-  <div style="background:#E8F0FE;color:#1967D2;padding:10px 16px;border-radius:10px;font-size:13px;font-weight:600;margin-bottom:16px;">
-    ⚡ تم تجهيز هذه الصفحة في وضع توفير البيانات والشبكة الضعيفة لضمان استمرار التصفح
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>${targetUrl}</title>
+</head>
+<body style="font-family:system-ui,-apple-system,sans-serif;max-width:760px;margin:0 auto;padding:16px 20px;color:#202124;background:#fff;line-height:1.6;">
+  <div style="background:#E8F0FE;color:#1967D2;padding:12px 16px;border-radius:12px;font-size:13px;font-weight:600;margin-bottom:16px;display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:8px;">
+    <span>⚡ تم تجهيز ملخص هذا الموقع بوضع توفير البيانات والشبكة الضعيفة لضمان استمرار التصفح</span>
+    <a href="${targetUrl}" target="_blank" rel="noopener noreferrer" style="background:#1A73E8;color:#fff;padding:6px 12px;border-radius:8px;text-decoration:none;font-size:12px;">فتح الموقع مباشرة ↗</a>
   </div>
-  <h2 style="color:#1A73E8;">🌐 محتوى ونتائج الموقع: ${targetUrl}</h2>
+  <h2 style="color:#1A73E8;margin-top:0;">🌐 محتوى ونتائج الموقع: ${targetUrl}</h2>
   ${rows}
 </body></html>`);
       } catch {
-        res.status(500).send('Error loading page');
+        res.removeHeader('X-Frame-Options');
+        res.removeHeader('Content-Security-Policy');
+        res.setHeader('Content-Security-Policy', "frame-ancestors *");
+        res.setHeader('Content-Type', 'text/html; charset=utf-8');
+        res.send(`<!DOCTYPE html>
+<html dir="rtl" lang="ar">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>تعذر عرض الصفحة</title>
+</head>
+<body style="font-family:system-ui,-apple-system,sans-serif;max-width:600px;margin:0 auto;padding:32px 20px;color:#202124;background:#fff;text-align:center;">
+  <div style="font-size:42px;margin-bottom:12px;">🌐</div>
+  <h2 style="color:#202124;margin-bottom:8px;">تعذر تضمين الموقع داخل الإطار</h2>
+  <p style="color:#5F6368;font-size:14px;margin-bottom:20px;">يمنع موقع <b>${targetUrl}</b> التضمين المباشر أو أن هناك بطء في الشبكة. يمكنك فتحه مباشرة في متصفحك.</p>
+  <div style="display:flex;justify-content:center;gap:12px;flex-wrap:wrap;">
+    <a href="${targetUrl}" target="_blank" rel="noopener noreferrer" style="background:#1A73E8;color:#fff;padding:10px 20px;border-radius:10px;text-decoration:none;font-size:14px;font-weight:bold;">فتح الموقع مباشرة في تبويب جديد ↗</a>
+    <button onclick="location.reload()" style="background:#F1F3F4;color:#202124;border:none;padding:10px 18px;border-radius:10px;font-size:14px;font-weight:600;cursor:pointer;">إعادة المحاولة</button>
+  </div>
+</body></html>`);
       }
     }
   });
