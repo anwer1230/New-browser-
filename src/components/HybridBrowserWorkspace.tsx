@@ -246,6 +246,9 @@ export const HybridBrowserWorkspace: React.FC<HybridBrowserWorkspaceProps> = ({
   const [currentTime, setCurrentTime] = useState<number>(0);
   const [subtitleMode, setSubtitleMode] = useState<'ar' | 'orig' | 'dual' | 'off'>('dual');
   const [subtitleFontSize, setSubtitleFontSize] = useState<number>(18);
+  const [subtitleOffsetSec, setSubtitleOffsetSec] = useState<number>(0);
+  const [isLiveStreamTranslating, setIsLiveStreamTranslating] = useState<boolean>(false);
+  const [sceneAiExplanation, setSceneAiExplanation] = useState<string | null>(null);
   const [isSyncingWatch, setIsSyncingWatch] = useState<boolean>(false);
   const [statusBanner, setStatusBanner] = useState<string | null>(null);
 
@@ -848,9 +851,55 @@ export const HybridBrowserWorkspace: React.FC<HybridBrowserWorkspaceProps> = ({
     }
   };
 
+  const adjustedCurrentTime = currentTime + subtitleOffsetSec;
   const activeSegment = segments.find(
-    (seg) => currentTime >= seg.start && currentTime <= seg.end
+    (seg) => adjustedCurrentTime >= seg.start && adjustedCurrentTime <= seg.end
   );
+
+  // --- Instant Live Stream Translation via Groq (/api/stream-translate) ---
+  const handleInstantGroqStreamTranslate = async () => {
+    if (!segments.length || isLiveStreamTranslating) return;
+    setIsLiveStreamTranslating(true);
+    try {
+      const res = await fetch('/api/stream-translate', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ segments, targetLanguage: 'ar' }),
+      });
+      if (res.ok) {
+        const data = await res.json();
+        if (Array.isArray(data.segments)) {
+          setSegments(data.segments);
+          showBanner('⚡ تم تحديث الترجمة العربية الفورية لجميع الجمل عبر Groq (llama-3.3-70b)!');
+        }
+      }
+    } finally {
+      setIsLiveStreamTranslating(false);
+    }
+  };
+
+  // --- Explain Current Subtitle Scene via AI ---
+  const handleExplainCurrentScene = async () => {
+    const seg = activeSegment || segments[0];
+    if (!seg) return;
+    setSceneAiExplanation('جاري تحليل سياق المشهد والحوار عبر محرك Groq...');
+    try {
+      const res = await fetch('/api/browse', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          input: `اشرح باختصار معنى وسياق هذه الجملة في فيديو "${activeVideo?.title || ''}": "${seg.text}" (الترجمة: ${seg.translation_ar || ''})`,
+          translateToArabic: true,
+        }),
+      });
+      if (res.ok) {
+        const data = await res.json();
+        setSceneAiExplanation(data.content_ar || '');
+      }
+    } catch {
+      setSceneAiExplanation(null);
+    }
+  };
 
   return (
     /* ═══ AnimatedBackground (animated_background.dart) ═══ */
@@ -1646,49 +1695,115 @@ export const HybridBrowserWorkspace: React.FC<HybridBrowserWorkspaceProps> = ({
                   )}
                 </div>
 
-                <div className="rounded-[18px] bg-[#151B2E] border border-[#2A3348] p-4 flex flex-wrap items-center justify-between gap-3">
-                  <div className="flex items-center gap-3 text-xs text-[#94A3B8]">
-                    <span>حجم خط الترجمة:</span>
-                    <input
-                      type="range"
-                      min={14}
-                      max={26}
-                      value={subtitleFontSize}
-                      onChange={(e) => setSubtitleFontSize(Number(e.target.value))}
-                      className="w-24 accent-[#6366F1]"
-                    />
-                    <span className="font-mono text-white">{subtitleFontSize}px</span>
-                  </div>
+                <div className="rounded-[18px] bg-[#151B2E] border border-[#2A3348] p-4 space-y-3">
+                  <div className="flex flex-wrap items-center justify-between gap-3">
+                    <div className="flex items-center gap-3 text-xs text-[#94A3B8]">
+                      <span>حجم خط الترجمة:</span>
+                      <input
+                        type="range"
+                        min={14}
+                        max={26}
+                        value={subtitleFontSize}
+                        onChange={(e) => setSubtitleFontSize(Number(e.target.value))}
+                        className="w-24 accent-[#6366F1]"
+                      />
+                      <span className="font-mono text-white">{subtitleFontSize}px</span>
+                    </div>
 
-                  <div className="flex flex-wrap items-center gap-2">
-                    <button
-                      onClick={() => handleTranslateAndWatch(activeVideo)}
-                      disabled={processingVideoId === activeVideo.id}
-                      className="px-3.5 py-2 rounded-[12px] bg-[#6366F1] hover:bg-[#5558E6] text-xs font-bold text-white flex items-center gap-1.5 cursor-pointer"
-                    >
-                      <Languages className="w-3.5 h-3.5" />
-                      <span>توليد ترجمة Whisper كاملة</span>
-                    </button>
-
-                    {srtArabicContent && (
+                    {/* Subtitle Sync Offset Controls */}
+                    <div className="flex items-center gap-1.5 text-xs">
+                      <span className="text-[#94A3B8]">مزامنة التوقيت:</span>
                       <button
-                        onClick={() => handleDownloadSrtFile(srtArabicContent, 'ar')}
-                        className="px-3.5 py-2 rounded-[12px] bg-[#1E2638] hover:bg-[#2A3348] text-xs font-semibold text-white flex items-center gap-1.5 cursor-pointer"
+                        type="button"
+                        onClick={() => setSubtitleOffsetSec((s) => Number((s - 0.5).toFixed(1)))}
+                        className="px-2 py-1 rounded-lg bg-[#0A0E1A] border border-[#2A3348] text-white font-mono cursor-pointer"
                       >
-                        <Download className="w-3.5 h-3.5 text-[#10B981]" />
-                        <span>تحميل SRT العربي</span>
+                        -0.5s
                       </button>
-                    )}
-
-                    <button
-                      onClick={handleSyncPlaybackToCloud}
-                      disabled={isSyncingWatch}
-                      className="px-3.5 py-2 rounded-[12px] border border-[#2A3348] hover:bg-[#1E2638] text-xs text-[#94A3B8] hover:text-white flex items-center gap-1.5 cursor-pointer"
-                    >
-                      <Cloud className="w-3.5 h-3.5 text-[#06B6D4]" />
-                      <span>{isSyncingWatch ? 'جاري الحفظ...' : 'حفظ الموضع سحابياً'}</span>
-                    </button>
+                      <span className="px-2 font-mono text-[#06B6D4]">
+                        {subtitleOffsetSec >= 0 ? `+${subtitleOffsetSec}s` : `${subtitleOffsetSec}s`}
+                      </span>
+                      <button
+                        type="button"
+                        onClick={() => setSubtitleOffsetSec((s) => Number((s + 0.5).toFixed(1)))}
+                        className="px-2 py-1 rounded-lg bg-[#0A0E1A] border border-[#2A3348] text-white font-mono cursor-pointer"
+                      >
+                        +0.5s
+                      </button>
+                    </div>
                   </div>
+
+                  <div className="flex flex-wrap items-center justify-between gap-2 pt-2 border-t border-[#2A3348]">
+                    <div className="flex flex-wrap items-center gap-2">
+                      <button
+                        onClick={handleInstantGroqStreamTranslate}
+                        disabled={isLiveStreamTranslating}
+                        className="px-3.5 py-2 rounded-[12px] bg-[#06B6D4]/20 border border-[#06B6D4]/40 hover:bg-[#06B6D4]/30 text-xs font-bold text-[#06B6D4] flex items-center gap-1.5 cursor-pointer"
+                      >
+                        <Sparkles className="w-3.5 h-3.5" />
+                        <span>
+                          {isLiveStreamTranslating
+                            ? 'جاري الترجمة الفورية...'
+                            : '⚡ ترجمة فورية متدفقة (Groq)'}
+                        </span>
+                      </button>
+
+                      <button
+                        onClick={() => handleTranslateAndWatch(activeVideo)}
+                        disabled={processingVideoId === activeVideo.id}
+                        className="px-3.5 py-2 rounded-[12px] bg-[#6366F1] hover:bg-[#5558E6] text-xs font-bold text-white flex items-center gap-1.5 cursor-pointer"
+                      >
+                        <Languages className="w-3.5 h-3.5" />
+                        <span>توليد ترجمة Whisper + SRT كاملة</span>
+                      </button>
+
+                      <button
+                        onClick={handleExplainCurrentScene}
+                        className="px-3 py-2 rounded-[12px] bg-[#1E2638] hover:bg-[#2A3348] text-xs text-white flex items-center gap-1.5 cursor-pointer"
+                      >
+                        <Sparkles className="w-3.5 h-3.5 text-[#F59E0B]" />
+                        <span>شرح حوار المشهد</span>
+                      </button>
+                    </div>
+
+                    <div className="flex flex-wrap items-center gap-2">
+                      {srtArabicContent && (
+                        <button
+                          onClick={() => handleDownloadSrtFile(srtArabicContent, 'ar')}
+                          className="px-3.5 py-2 rounded-[12px] bg-[#1E2638] hover:bg-[#2A3348] text-xs font-semibold text-white flex items-center gap-1.5 cursor-pointer"
+                        >
+                          <Download className="w-3.5 h-3.5 text-[#10B981]" />
+                          <span>تحميل SRT العربي</span>
+                        </button>
+                      )}
+
+                      <button
+                        onClick={handleSyncPlaybackToCloud}
+                        disabled={isSyncingWatch}
+                        className="px-3.5 py-2 rounded-[12px] border border-[#2A3348] hover:bg-[#1E2638] text-xs text-[#94A3B8] hover:text-white flex items-center gap-1.5 cursor-pointer"
+                      >
+                        <Cloud className="w-3.5 h-3.5 text-[#06B6D4]" />
+                        <span>{isSyncingWatch ? 'جاري الحفظ...' : 'حفظ الموضع سحابياً'}</span>
+                      </button>
+                    </div>
+                  </div>
+
+                  {sceneAiExplanation && (
+                    <div className="p-3.5 rounded-xl bg-[#0A0E1A] border border-[#6366F1]/40 text-xs text-slate-200 space-y-1">
+                      <div className="flex items-center justify-between">
+                        <span className="font-bold text-[#06B6D4]">🤖 تحليل وشرح الحوار بالذكاء الاصطناعي:</span>
+                        <button
+                          onClick={() => setSceneAiExplanation(null)}
+                          className="text-[#94A3B8] hover:text-white cursor-pointer"
+                        >
+                          <X className="w-3.5 h-3.5" />
+                        </button>
+                      </div>
+                      <div className="prose prose-invert max-w-none text-xs leading-relaxed">
+                        <ReactMarkdown>{sceneAiExplanation}</ReactMarkdown>
+                      </div>
+                    </div>
+                  )}
                 </div>
               </div>
 
