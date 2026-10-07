@@ -1,0 +1,435 @@
+{
+  "entities": {
+    "ChatSession": {
+      "title": "ChatSession",
+      "description": "Represents a Hybrid AI conversation session.",
+      "type": "object",
+      "properties": {
+        "title": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 200,
+          "description": "Session title"
+        },
+        "ownerId": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 128,
+          "pattern": "^[a-zA-Z0-9_\\-]+$",
+          "description": "UID of the user who owns this session"
+        },
+        "messageCount": {
+          "type": "integer",
+          "description": "Total messages in the session"
+        },
+        "lastMessagePreview": {
+          "type": "string",
+          "maxLength": 500,
+          "description": "Preview of the latest message"
+        },
+        "createdAt": {
+          "type": "string",
+          "format": "date-time",
+          "description": "Creation timestamp"
+        },
+        "updatedAt": {
+          "type": "string",
+          "format": "date-time",
+          "description": "Last update timestamp"
+        }
+      },
+      "required": [
+        "title",
+        "ownerId",
+        "messageCount",
+        "lastMessagePreview",
+        "createdAt",
+        "updatedAt"
+      ]
+    },
+    "ChatMessage": {
+      "title": "ChatMessage",
+      "description": "Represents a single message in a Hybrid AI session with expert routing telemetry.",
+      "type": "object",
+      "properties": {
+        "sessionId": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 128,
+          "pattern": "^[a-zA-Z0-9_\\-]+$",
+          "description": "ID of the parent ChatSession"
+        },
+        "ownerId": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 128,
+          "pattern": "^[a-zA-Z0-9_\\-]+$",
+          "description": "UID of the user who owns this message"
+        },
+        "role": {
+          "type": "string",
+          "enum": ["user", "assistant", "system"],
+          "maxLength": 20,
+          "description": "Role of the message sender"
+        },
+        "content": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 20000,
+          "description": "Message markdown content"
+        },
+        "expertsUsed": {
+          "type": "string",
+          "maxLength": 200,
+          "description": "Comma-separated list of experts invoked"
+        },
+        "reasoning": {
+          "type": "string",
+          "maxLength": 2000,
+          "description": "Orchestrator reasoning for selecting experts"
+        },
+        "expertOutputsJson": {
+          "type": "string",
+          "maxLength": 30000,
+          "description": "Serialized outputs from individual experts"
+        },
+        "elapsedSeconds": {
+          "type": "number",
+          "description": "Processing latency in seconds"
+        },
+        "createdAt": {
+          "type": "string",
+          "format": "date-time",
+          "description": "Creation timestamp"
+        }
+      },
+      "required": [
+        "sessionId",
+        "ownerId",
+        "role",
+        "content",
+        "expertsUsed",
+        "reasoning",
+        "expertOutputsJson",
+        "elapsedSeconds",
+        "createdAt"
+      ]
+    },
+    "RagDocument": {
+      "title": "RagDocument",
+      "description": "Represents an ingested document stored for RAG vector search and long-term persistence.",
+      "type": "object",
+      "properties": {
+        "fileName": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 255,
+          "description": "Source document filename"
+        },
+        "ownerId": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 128,
+          "pattern": "^[a-zA-Z0-9_\\-]+$",
+          "description": "UID of the user who uploaded this document"
+        },
+        "content": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 50000,
+          "description": "Extracted plain text content of the document"
+        },
+        "chunksCount": {
+          "type": "integer",
+          "description": "Number of chunks indexed into Qdrant RAG"
+        },
+        "fileType": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 20,
+          "description": "File extension such as .pdf, .docx, .txt, .md"
+        },
+        "createdAt": {
+          "type": "string",
+          "format": "date-time",
+          "description": "Upload timestamp"
+        }
+      },
+      "required": [
+        "fileName",
+        "ownerId",
+        "content",
+        "chunksCount",
+        "fileType",
+        "createdAt"
+      ]
+    },
+    "UserSettings": {
+      "title": "UserSettings",
+      "description": "Stores user-specific Hybrid AI configuration and mobile/web preferences.",
+      "type": "object",
+      "properties": {
+        "ownerId": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 128,
+          "pattern": "^[a-zA-Z0-9_\\-]+$",
+          "description": "UID of the user"
+        },
+        "serverUrl": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 300,
+          "description": "Configured Hybrid AI API server URL"
+        },
+        "apiKeyHint": {
+          "type": "string",
+          "maxLength": 100,
+          "description": "Optional non-sensitive API key label"
+        },
+        "verboseMode": {
+          "type": "boolean",
+          "description": "Whether verbose orchestrator telemetry is enabled"
+        },
+        "cloudFallbackEnabled": {
+          "type": "boolean",
+          "description": "Whether cloud fallback is active"
+        },
+        "orchestratorModel": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 100,
+          "description": "Configured orchestrator model name"
+        },
+        "updatedAt": {
+          "type": "string",
+          "format": "date-time",
+          "description": "Last update timestamp"
+        }
+      },
+      "required": [
+        "ownerId",
+        "serverUrl",
+        "apiKeyHint",
+        "verboseMode",
+        "cloudFallbackEnabled",
+        "orchestratorModel",
+        "updatedAt"
+      ]
+    },
+    "WatchHistoryItem": {
+      "title": "WatchHistoryItem",
+      "description": "Represents a user's synced video watch progress and translated SRT subtitles across devices.",
+      "type": "object",
+      "properties": {
+        "videoId": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 128,
+          "pattern": "^[a-zA-Z0-9_\\-]+$",
+          "description": "Unique identifier of the video"
+        },
+        "ownerId": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 128,
+          "pattern": "^[a-zA-Z0-9_\\-]+$",
+          "description": "UID of the user who watched the video"
+        },
+        "title": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 300,
+          "description": "Video title"
+        },
+        "videoUrl": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 1000,
+          "description": "Stream or source URL"
+        },
+        "thumbnail": {
+          "type": "string",
+          "maxLength": 1000,
+          "description": "Thumbnail URL"
+        },
+        "uploader": {
+          "type": "string",
+          "maxLength": 200,
+          "description": "Channel or uploader name"
+        },
+        "duration": {
+          "type": "number",
+          "description": "Total video duration in seconds"
+        },
+        "progressSeconds": {
+          "type": "number",
+          "description": "Last watched playback position in seconds"
+        },
+        "quality": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 20,
+          "description": "Selected stream quality (e.g. 720, 1080)"
+        },
+        "detectedLanguage": {
+          "type": "string",
+          "maxLength": 20,
+          "description": "Source audio language code"
+        },
+        "srtArabic": {
+          "type": "string",
+          "maxLength": 30000,
+          "description": "Generated Arabic SRT subtitle file content"
+        },
+        "srtOriginal": {
+          "type": "string",
+          "maxLength": 30000,
+          "description": "Original language SRT subtitle file content"
+        },
+        "deviceName": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 100,
+          "description": "Device or platform where progress was last synced"
+        },
+        "createdAt": {
+          "type": "string",
+          "format": "date-time",
+          "description": "First watched timestamp"
+        },
+        "updatedAt": {
+          "type": "string",
+          "format": "date-time",
+          "description": "Last synced timestamp"
+        }
+      },
+      "required": [
+        "videoId",
+        "ownerId",
+        "title",
+        "videoUrl",
+        "thumbnail",
+        "uploader",
+        "duration",
+        "progressSeconds",
+        "quality",
+        "detectedLanguage",
+        "srtArabic",
+        "srtOriginal",
+        "deviceName",
+        "createdAt",
+        "updatedAt"
+      ]
+    },
+    "CloudInfrastructure": {
+      "title": "CloudInfrastructure",
+      "description": "Stores user-approved Oracle Cloud Free Instance, WireGuard VPN Tunnel, and Groq permanent engine state.",
+      "type": "object",
+      "properties": {
+        "ownerId": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 128,
+          "pattern": "^[a-zA-Z0-9_\\-]+$",
+          "description": "UID of the user who approved the infrastructure"
+        },
+        "instanceShape": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 100,
+          "description": "Oracle Cloud instance shape (e.g., VM.Standard.A1.Flex)"
+        },
+        "instanceRegion": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 100,
+          "description": "Oracle Cloud region"
+        },
+        "publicIp": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 100,
+          "description": "Server public IP"
+        },
+        "vpnClientConf": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 4000,
+          "description": "Generated WireGuard client.conf"
+        },
+        "vpnServerConf": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 4000,
+          "description": "Generated WireGuard wg0.conf"
+        },
+        "sshPublicKey": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 2000,
+          "description": "Generated SSH Ed25519 public key for instance access"
+        },
+        "groqEnabled": {
+          "type": "boolean",
+          "description": "Whether permanent Groq key integration is approved and active"
+        },
+        "status": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 50,
+          "description": "Provisioning status"
+        },
+        "createdAt": {
+          "type": "string",
+          "format": "date-time",
+          "description": "Creation timestamp"
+        },
+        "updatedAt": {
+          "type": "string",
+          "format": "date-time",
+          "description": "Last update timestamp"
+        }
+      },
+      "required": [
+        "ownerId",
+        "instanceShape",
+        "instanceRegion",
+        "publicIp",
+        "vpnClientConf",
+        "vpnServerConf",
+        "sshPublicKey",
+        "groqEnabled",
+        "status",
+        "createdAt",
+        "updatedAt"
+      ]
+    }
+  },
+  "firestore": {
+    "/sessions/{sessionId}": {
+      "schema": { "$ref": "#/entities/ChatSession" },
+      "description": "Stores user chat sessions for Hybrid AI."
+    },
+    "/messages/{messageId}": {
+      "schema": { "$ref": "#/entities/ChatMessage" },
+      "description": "Stores individual chat messages and expert outputs."
+    },
+    "/rag_documents/{docId}": {
+      "schema": { "$ref": "#/entities/RagDocument" },
+      "description": "Stores user uploaded RAG documents."
+    },
+    "/user_settings/{userId}": {
+      "schema": { "$ref": "#/entities/UserSettings" },
+      "description": "Stores user settings and preferences."
+    },
+    "/watch_history/{watchId}": {
+      "schema": { "$ref": "#/entities/WatchHistoryItem" },
+      "description": "Stores cross-device synced video watch progress and Arabic SRT subtitles."
+    },
+    "/cloud_infrastructure/{infraId}": {
+      "schema": { "$ref": "#/entities/CloudInfrastructure" },
+      "description": "Stores provisioned Oracle Cloud Instance, WireGuard VPN, and Groq status."
+    }
+  }
+}

@@ -1,0 +1,6 @@
+{
+  "name": "Hybrid AI System",
+  "description": "نظام ذكاء اصطناعي هجين متكامل مع موجّه ذكي، 5 خبراء متخصصين، بحث RAG في المستندات، ذاكرة طويلة المدى، وواجهة ويب وموبايل",
+  "requestFramePermissions": ["microphone"],
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+}

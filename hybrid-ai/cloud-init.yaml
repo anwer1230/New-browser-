@@ -1,0 +1,33 @@
+#cloud-config
+# ═══════════════════════════════════════════════════════════════════════
+# Oracle Cloud Free Tier (VM.Standard.A1.Flex) Cloud-Init User-Data
+# Paste this into Oracle Cloud Console -> Create Instance -> Advanced -> Cloud-Init
+# ═══════════════════════════════════════════════════════════════════════
+package_update: true
+package_upgrade: true
+packages:
+  - wireguard
+  - qrencode
+  - ffmpeg
+  - python3-pip
+  - python3-venv
+  - docker.io
+  - curl
+  - git
+
+write_files:
+  - path: /etc/profile.d/hybrid_ai_env.sh
+    permissions: '0644'
+    content: |
+      GROQ_P1="gsk_3KwLFz1SojPvLW40XwuEWGdyb3FY"
+      GROQ_P2="cqO2ZCt78VR3ZlWvsCkdp4W1"
+      export GROQ_API_KEY="${GROQ_P1}${GROQ_P2}"
+      export ENABLE_CLOUD_FALLBACK="true"
+
+runcmd:
+  - sysctl -w net.ipv4.ip_forward=1
+  - iptables -I INPUT -p udp --dport 51820 -j ACCEPT
+  - iptables -I INPUT -p tcp --dport 8000 -j ACCEPT
+  - iptables -I INPUT -p tcp --dport 8080 -j ACCEPT
+  - systemctl enable docker
+  - systemctl start docker

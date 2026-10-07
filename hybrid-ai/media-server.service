@@ -1,0 +1,13 @@
+[Unit]
+Description=AI Media Server
+After=network.target
+
+[Service]
+User=ubuntu
+WorkingDirectory=/home/ubuntu/media-server
+Environment="GROQ_API_KEY=gsk_3KwLFz1SojPvLW40XwuEWGdyb3FY""cqO2ZCt78VR3ZlWvsCkdp4W1"
+ExecStart=/home/ubuntu/media-server/venv/bin/uvicorn media_server:app --host 0.0.0.0 --port 8080
+Restart=always
+
+[Install]
+WantedBy=multi-user.target

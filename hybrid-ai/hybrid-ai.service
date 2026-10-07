@@ -1,0 +1,15 @@
+[Unit]
+Description=Hybrid AI Service
+After=network.target ollama.service docker.service
+
+[Service]
+Type=simple
+User=ubuntu
+WorkingDirectory=/home/ubuntu/hybrid-ai
+Environment="PATH=/home/ubuntu/hybrid-ai/venv/bin"
+ExecStart=/home/ubuntu/hybrid-ai/venv/bin/uvicorn server:app --host 0.0.0.0 --port 8000
+Restart=always
+RestartSec=10
+
+[Install]
+WantedBy=multi-user.target

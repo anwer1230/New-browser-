@@ -1,0 +1,42 @@
+version: '3.9'
+
+services:
+  hybrid-ai:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    image: hybrid-ai:latest
+    container_name: hybrid-ai
+    restart: unless-stopped
+    ports:
+      - "8080:8080"    # Open WebUI
+      - "8000:8000"    # API
+      - "11434:11434"  # Ollama (اختياري للوصول الخارجي)
+      - "6333:6333"    # Qdrant (اختياري)
+    volumes:
+      - ollama_models:/root/.ollama
+      - qdrant_data:/qdrant/storage
+      - redis_data:/data/redis
+      - ./logs:/app/logs
+      - ./data:/app/data
+    environment:
+      - GROQ_API_KEY=${GROQ_API_KEY:-}
+      - HYBRID_API_KEY=${HYBRID_API_KEY:-change-me}
+      - WEBUI_SECRET_KEY=${WEBUI_SECRET_KEY:-change-me-too}
+    deploy:
+      resources:
+        limits:
+          memory: 12G
+        reservations:
+          memory: 6G
+    healthcheck:
+      test: ["CMD", "curl", "-fsS", "http://localhost:8000/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 120s
+
+volumes:
+  ollama_models:
+  qdrant_data:
+  redis_data:

@@ -1,0 +1,221 @@
+rules_version = '2';
+
+service cloud.firestore {
+  match /databases/{database}/documents {
+    // Pillar 1: Global Safety Net (Default Deny)
+    match /{document=**} {
+      allow read, write: if false;
+    }
+
+    // Global Primitives
+    function isSignedIn() {
+      return request.auth != null && request.auth.token.email_verified == true;
+    }
+
+    function isValidId(id) {
+      return id is string && id.size() >= 1 && id.size() <= 128 && id.matches('^[a-zA-Z0-9_\\-]+$');
+    }
+
+    function incoming() {
+      return request.resource.data;
+    }
+
+    function existing() {
+      return resource.data;
+    }
+
+    // Validation Blueprints
+    function isValidChatSession(data) {
+      return data.keys().hasAll(['title', 'ownerId', 'messageCount', 'lastMessagePreview', 'createdAt', 'updatedAt'])
+        && data.keys().hasOnly(['title', 'ownerId', 'messageCount', 'lastMessagePreview', 'createdAt', 'updatedAt'])
+        && data.title is string && data.title.size() >= 1 && data.title.size() <= 200
+        && data.ownerId is string && isValidId(data.ownerId) && data.ownerId == request.auth.uid
+        && data.messageCount is int && data.messageCount >= 0 && data.messageCount <= 10000
+        && data.lastMessagePreview is string && data.lastMessagePreview.size() <= 500
+        && data.createdAt is timestamp
+        && data.updatedAt is timestamp;
+    }
+
+    function isValidChatMessage(data) {
+      return data.keys().hasAll(['sessionId', 'ownerId', 'role', 'content', 'expertsUsed', 'reasoning', 'expertOutputsJson', 'elapsedSeconds', 'createdAt'])
+        && data.keys().hasOnly(['sessionId', 'ownerId', 'role', 'content', 'expertsUsed', 'reasoning', 'expertOutputsJson', 'elapsedSeconds', 'createdAt'])
+        && data.sessionId is string && isValidId(data.sessionId)
+        && data.ownerId is string && isValidId(data.ownerId) && data.ownerId == request.auth.uid
+        && data.role is string && data.role.size() <= 20 && (data.role == 'user' || data.role == 'assistant' || data.role == 'system')
+        && data.content is string && data.content.size() >= 1 && data.content.size() <= 20000
+        && data.expertsUsed is string && data.expertsUsed.size() <= 200
+        && data.reasoning is string && data.reasoning.size() <= 2000
+        && data.expertOutputsJson is string && data.expertOutputsJson.size() <= 30000
+        && (data.elapsedSeconds is int || data.elapsedSeconds is float) && data.elapsedSeconds >= 0
+        && data.createdAt is timestamp;
+    }
+
+    function isValidRagDocument(data) {
+      return data.keys().hasAll(['fileName', 'ownerId', 'content', 'chunksCount', 'fileType', 'createdAt'])
+        && data.keys().hasOnly(['fileName', 'ownerId', 'content', 'chunksCount', 'fileType', 'createdAt'])
+        && data.fileName is string && data.fileName.size() >= 1 && data.fileName.size() <= 255
+        && data.ownerId is string && isValidId(data.ownerId) && data.ownerId == request.auth.uid
+        && data.content is string && data.content.size() >= 1 && data.content.size() <= 50000
+        && data.chunksCount is int && data.chunksCount >= 0 && data.chunksCount <= 5000
+        && data.fileType is string && data.fileType.size() >= 1 && data.fileType.size() <= 20
+        && data.createdAt is timestamp;
+    }
+
+    function isValidUserSettings(data) {
+      return data.keys().hasAll(['ownerId', 'serverUrl', 'apiKeyHint', 'verboseMode', 'cloudFallbackEnabled', 'orchestratorModel', 'updatedAt'])
+        && data.keys().hasOnly(['ownerId', 'serverUrl', 'apiKeyHint', 'verboseMode', 'cloudFallbackEnabled', 'orchestratorModel', 'updatedAt'])
+        && data.ownerId is string && isValidId(data.ownerId) && data.ownerId == request.auth.uid
+        && data.serverUrl is string && data.serverUrl.size() >= 1 && data.serverUrl.size() <= 300
+        && data.apiKeyHint is string && data.apiKeyHint.size() <= 100
+        && data.verboseMode is bool
+        && data.cloudFallbackEnabled is bool
+        && data.orchestratorModel is string && data.orchestratorModel.size() >= 1 && data.orchestratorModel.size() <= 100
+        && data.updatedAt is timestamp;
+    }
+
+    function isValidWatchHistoryItem(data) {
+      return data.keys().hasAll(['videoId', 'ownerId', 'title', 'videoUrl', 'thumbnail', 'uploader', 'duration', 'progressSeconds', 'quality', 'detectedLanguage', 'srtArabic', 'srtOriginal', 'deviceName', 'createdAt', 'updatedAt'])
+        && data.keys().hasOnly(['videoId', 'ownerId', 'title', 'videoUrl', 'thumbnail', 'uploader', 'duration', 'progressSeconds', 'quality', 'detectedLanguage', 'srtArabic', 'srtOriginal', 'deviceName', 'createdAt', 'updatedAt'])
+        && data.videoId is string && isValidId(data.videoId)
+        && data.ownerId is string && isValidId(data.ownerId) && data.ownerId == request.auth.uid
+        && data.title is string && data.title.size() >= 1 && data.title.size() <= 300
+        && data.videoUrl is string && data.videoUrl.size() >= 1 && data.videoUrl.size() <= 1000
+        && data.thumbnail is string && data.thumbnail.size() <= 1000
+        && data.uploader is string && data.uploader.size() <= 200
+        && (data.duration is int || data.duration is float) && data.duration >= 0 && data.duration <= 86400
+        && (data.progressSeconds is int || data.progressSeconds is float) && data.progressSeconds >= 0 && data.progressSeconds <= 86400
+        && data.quality is string && data.quality.size() >= 1 && data.quality.size() <= 20
+        && data.detectedLanguage is string && data.detectedLanguage.size() <= 20
+        && data.srtArabic is string && data.srtArabic.size() <= 30000
+        && data.srtOriginal is string && data.srtOriginal.size() <= 30000
+        && data.deviceName is string && data.deviceName.size() >= 1 && data.deviceName.size() <= 100
+        && data.createdAt is timestamp
+        && data.updatedAt is timestamp;
+    }
+
+    function isValidCloudInfrastructure(data) {
+      return data.keys().hasAll(['ownerId', 'instanceShape', 'instanceRegion', 'publicIp', 'vpnClientConf', 'vpnServerConf', 'sshPublicKey', 'groqEnabled', 'status', 'createdAt', 'updatedAt'])
+        && data.keys().hasOnly(['ownerId', 'instanceShape', 'instanceRegion', 'publicIp', 'vpnClientConf', 'vpnServerConf', 'sshPublicKey', 'groqEnabled', 'status', 'createdAt', 'updatedAt'])
+        && data.ownerId is string && isValidId(data.ownerId) && data.ownerId == request.auth.uid
+        && data.instanceShape is string && data.instanceShape.size() >= 1 && data.instanceShape.size() <= 100
+        && data.instanceRegion is string && data.instanceRegion.size() >= 1 && data.instanceRegion.size() <= 100
+        && data.publicIp is string && data.publicIp.size() >= 1 && data.publicIp.size() <= 100
+        && data.vpnClientConf is string && data.vpnClientConf.size() >= 1 && data.vpnClientConf.size() <= 4000
+        && data.vpnServerConf is string && data.vpnServerConf.size() >= 1 && data.vpnServerConf.size() <= 4000
+        && data.sshPublicKey is string && data.sshPublicKey.size() >= 1 && data.sshPublicKey.size() <= 2000
+        && data.groqEnabled is bool
+        && data.status is string && data.status.size() >= 1 && data.status.size() <= 50
+        && data.createdAt is timestamp
+        && data.updatedAt is timestamp;
+    }
+
+    // 1. Sessions Collection
+    match /sessions/{sessionId} {
+      allow get: if isSignedIn() && isValidId(sessionId) && existing().ownerId == request.auth.uid;
+      allow list: if isSignedIn() && existing().ownerId == request.auth.uid;
+      allow create: if isSignedIn()
+        && isValidId(sessionId)
+        && isValidChatSession(incoming())
+        && incoming().createdAt == request.time
+        && incoming().updatedAt == request.time;
+      allow update: if isSignedIn()
+        && isValidId(sessionId)
+        && isValidChatSession(incoming())
+        && existing().ownerId == request.auth.uid
+        && incoming().ownerId == existing().ownerId
+        && incoming().createdAt == existing().createdAt
+        && incoming().updatedAt == request.time
+        && incoming().diff(existing()).affectedKeys().hasOnly(['title', 'messageCount', 'lastMessagePreview', 'updatedAt']);
+      allow delete: if isSignedIn() && isValidId(sessionId) && existing().ownerId == request.auth.uid;
+    }
+
+    // 2. Messages Collection
+    match /messages/{messageId} {
+      allow get: if isSignedIn() && isValidId(messageId) && existing().ownerId == request.auth.uid;
+      allow list: if isSignedIn() && existing().ownerId == request.auth.uid;
+      allow create: if isSignedIn()
+        && isValidId(messageId)
+        && isValidChatMessage(incoming())
+        && incoming().createdAt == request.time
+        && exists(/databases/$(database)/documents/sessions/$(incoming().sessionId))
+        && get(/databases/$(database)/documents/sessions/$(incoming().sessionId)).data.ownerId == request.auth.uid;
+      allow update: if false;
+      allow delete: if isSignedIn() && isValidId(messageId) && existing().ownerId == request.auth.uid;
+    }
+
+    // 3. RAG Documents Collection
+    match /rag_documents/{docId} {
+      allow get: if isSignedIn() && isValidId(docId) && existing().ownerId == request.auth.uid;
+      allow list: if isSignedIn() && existing().ownerId == request.auth.uid;
+      allow create: if isSignedIn()
+        && isValidId(docId)
+        && isValidRagDocument(incoming())
+        && incoming().createdAt == request.time;
+      allow update: if false;
+      allow delete: if isSignedIn() && isValidId(docId) && existing().ownerId == request.auth.uid;
+    }
+
+    // 4. User Settings Collection
+    match /user_settings/{userId} {
+      allow get: if isSignedIn() && isValidId(userId) && userId == request.auth.uid && existing().ownerId == request.auth.uid;
+      allow list: if false;
+      allow create: if isSignedIn()
+        && isValidId(userId)
+        && userId == request.auth.uid
+        && isValidUserSettings(incoming())
+        && incoming().updatedAt == request.time;
+      allow update: if isSignedIn()
+        && isValidId(userId)
+        && userId == request.auth.uid
+        && isValidUserSettings(incoming())
+        && existing().ownerId == request.auth.uid
+        && incoming().ownerId == existing().ownerId
+        && incoming().updatedAt == request.time
+        && incoming().diff(existing()).affectedKeys().hasOnly(['serverUrl', 'apiKeyHint', 'verboseMode', 'cloudFallbackEnabled', 'orchestratorModel', 'updatedAt']);
+      allow delete: if isSignedIn() && isValidId(userId) && userId == request.auth.uid && existing().ownerId == request.auth.uid;
+    }
+
+    // 5. Watch History Collection (Cross-Device Sync)
+    match /watch_history/{watchId} {
+      allow get: if isSignedIn() && isValidId(watchId) && existing().ownerId == request.auth.uid;
+      allow list: if isSignedIn() && existing().ownerId == request.auth.uid;
+      allow create: if isSignedIn()
+        && isValidId(watchId)
+        && isValidWatchHistoryItem(incoming())
+        && incoming().createdAt == request.time
+        && incoming().updatedAt == request.time;
+      allow update: if isSignedIn()
+        && isValidId(watchId)
+        && isValidWatchHistoryItem(incoming())
+        && existing().ownerId == request.auth.uid
+        && incoming().ownerId == existing().ownerId
+        && incoming().videoId == existing().videoId
+        && incoming().createdAt == existing().createdAt
+        && incoming().updatedAt == request.time
+        && incoming().diff(existing()).affectedKeys().hasOnly(['title', 'videoUrl', 'thumbnail', 'uploader', 'duration', 'progressSeconds', 'quality', 'detectedLanguage', 'srtArabic', 'srtOriginal', 'deviceName', 'updatedAt']);
+      allow delete: if isSignedIn() && isValidId(watchId) && existing().ownerId == request.auth.uid;
+    }
+
+    // 6. Cloud Infrastructure Collection (Oracle Instance + WireGuard VPN + Groq Status)
+    match /cloud_infrastructure/{infraId} {
+      allow get: if isSignedIn() && isValidId(infraId) && infraId == request.auth.uid && existing().ownerId == request.auth.uid;
+      allow list: if false;
+      allow create: if isSignedIn()
+        && isValidId(infraId)
+        && infraId == request.auth.uid
+        && isValidCloudInfrastructure(incoming())
+        && incoming().createdAt == request.time
+        && incoming().updatedAt == request.time;
+      allow update: if isSignedIn()
+        && isValidId(infraId)
+        && infraId == request.auth.uid
+        && isValidCloudInfrastructure(incoming())
+        && existing().ownerId == request.auth.uid
+        && incoming().ownerId == existing().ownerId
+        && incoming().createdAt == existing().createdAt
+        && incoming().updatedAt == request.time
+        && incoming().diff(existing()).affectedKeys().hasOnly(['instanceShape', 'instanceRegion', 'publicIp', 'vpnClientConf', 'vpnServerConf', 'sshPublicKey', 'groqEnabled', 'status', 'updatedAt']);
+      allow delete: if isSignedIn() && isValidId(infraId) && infraId == request.auth.uid && existing().ownerId == request.auth.uid;
+    }
+  }
+}
