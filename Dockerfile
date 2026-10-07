@@ -18,5 +18,5 @@ ENV PORT=10000
 
 EXPOSE 10000
 
-# تشغيل الخادم الموحّد (Express + Web Proxy + Groq Translation + Saved Pages DB)
-CMD ["npm", "run", "start"]
+# تشغيل الخادم الموحّد فوراً بدون تأخير (Express + Web Proxy + Groq Translation + Saved Pages DB)
+CMD ["node", "server.js"]

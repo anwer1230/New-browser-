@@ -160,18 +160,20 @@ function deterministicVector(text: string, dim = 256): number[] {
 }
 
 async function embed(text: string): Promise<number[]> {
-  try {
-    const ai = getGenAI();
-    const res = await ai.models.embedContent({
-      model: 'gemini-embedding-2-preview',
-      contents: text,
-    });
-    const values = res.embeddings?.[0]?.values;
-    if (values && values.length > 0) {
-      return values;
+  if (process.env.GEMINI_API_KEY) {
+    try {
+      const ai = getGenAI();
+      const res = await ai.models.embedContent({
+        model: 'gemini-embedding-2-preview',
+        contents: text,
+      });
+      const values = res.embeddings?.[0]?.values;
+      if (values && values.length > 0) {
+        return values;
+      }
+    } catch {
+      // Fallback to deterministic multilingual n-gram embedding
     }
-  } catch {
-    // Fallback to deterministic multilingual n-gram embedding
   }
   return deterministicVector(text, 256);
 }
@@ -458,19 +460,23 @@ async function unifiedChat(options: {
   }
 
   // 3. Gemini Engine Fallback
-  if (!resultText && ENABLE_CLOUD_FALLBACK) {
-    const ai = getGenAI();
-    const response = await ai.models.generateContent({
-      model: 'gemini-3.8-flash',
-      contents: prompt,
-      config: {
-        systemInstruction: system || undefined,
-        temperature,
-        responseMimeType: jsonMode ? 'application/json' : undefined,
-      },
-    });
-    resultText = response.text || '';
-    provider = `hybrid-engine (${model})`;
+  if (!resultText && ENABLE_CLOUD_FALLBACK && process.env.GEMINI_API_KEY) {
+    try {
+      const ai = getGenAI();
+      const response = await ai.models.generateContent({
+        model: 'gemini-3.8-flash',
+        contents: prompt,
+        config: {
+          systemInstruction: system || undefined,
+          temperature,
+          responseMimeType: jsonMode ? 'application/json' : undefined,
+        },
+      });
+      resultText = response.text || '';
+      provider = `hybrid-engine (${model})`;
+    } catch {
+      // Ignore Gemini fallback error
+    }
   }
 
   if (useCache && temperature <= 0.3 && resultText) {
