@@ -147,6 +147,31 @@ export default function App() {
     }
   };
 
+  // قاطع التكرار الذاتي: منع تشغيل واجهة المتصفح والأشرطة داخل إطار iframe متداخل
+  const isInsideBrowserViewport =
+    typeof window !== 'undefined' &&
+    (window.name === 'anwer_browser_web_frame' ||
+      window.location.search.includes('in_browser_frame=1') ||
+      (window.self !== window.top &&
+        (window.location.pathname.startsWith('/api/') ||
+          window.location.search.includes('url='))));
+
+  if (isInsideBrowserViewport) {
+    return (
+      <div
+        className="w-full h-full min-h-[100dvh] flex flex-col items-center justify-center p-6 bg-white dark:bg-[#202124] text-center text-[#202124] dark:text-white"
+        dir="rtl"
+        style={{ fontFamily: "'Cairo', 'Segoe UI', Tahoma, sans-serif" }}
+      >
+        <div className="w-10 h-10 rounded-full border-3 border-blue-600 border-t-transparent animate-spin mb-3" />
+        <p className="text-sm font-semibold mb-1">جاري تحميل الموقع في المتصفح...</p>
+        <p className="text-xs text-gray-500 max-w-xs">
+          إذا تعذّر تحميل الموقع، يمكنك الضغط على زر «فتح مباشر ↗» بأعلى الصفحة.
+        </p>
+      </div>
+    );
+  }
+
   return (
     <div
       className="h-[100dvh] min-h-[100dvh] w-full max-w-full overflow-hidden flex flex-col bg-[#F8F9FA] text-[#202124]"

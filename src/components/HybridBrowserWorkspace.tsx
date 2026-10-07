@@ -1169,7 +1169,7 @@ export const HybridBrowserWorkspace: React.FC<HybridBrowserWorkspaceProps> = ({
   const proxyIframeSrc = useMemo(() => {
     return `/api/web-proxy?url=${encodeURIComponent(activeTab.url)}&autoTranslate=${
       autoTranslate ? '1' : '0'
-    }&dataSaver=${dataSaverEnabled ? '1' : '0'}`;
+    }&dataSaver=${dataSaverEnabled ? '1' : '0'}&in_browser_frame=1`;
   }, [activeTab.url, autoTranslate, dataSaverEnabled]);
 
   return (
@@ -1604,6 +1604,7 @@ export const HybridBrowserWorkspace: React.FC<HybridBrowserWorkspaceProps> = ({
             {activeTab.offlineHtml ? (
               <iframe
                 ref={iframeRef}
+                name="anwer_browser_web_frame"
                 title={activeTab.title || 'Offline Reader'}
                 srcDoc={activeTab.offlineHtml}
                 className="w-full h-full border-0 bg-white dark:bg-[#202124]"
@@ -1613,6 +1614,7 @@ export const HybridBrowserWorkspace: React.FC<HybridBrowserWorkspaceProps> = ({
             ) : (
               <iframe
                 ref={iframeRef}
+                name="anwer_browser_web_frame"
                 key={`${activeTab.id}_${activeTab.url}_${autoTranslate}`}
                 title={activeTab.title || 'AnwerBrowser WebView'}
                 src={proxyIframeSrc}

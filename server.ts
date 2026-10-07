@@ -4115,6 +4115,10 @@ ${webResults.map((w, i) => `${i + 1}. ${w.title_ar} (${w.url}): ${w.snippet_ar}`
   } else {
     const distPath = path.join(process.cwd(), 'dist');
     app.use(express.static(distPath));
+    // حماية واجهة برمجة التطبيقات: منع إعادة توجيه أي مسار API إلى index.html نهائياً
+    app.all('/api/*', (_req: Request, res: Response) => {
+      res.status(404).json({ error: 'API route not found' });
+    });
     app.get('*', (_req, res) => {
       res.sendFile(path.join(distPath, 'index.html'));
     });
