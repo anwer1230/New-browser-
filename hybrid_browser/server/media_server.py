@@ -29,6 +29,11 @@ class AskAIReq(BaseModel):
     query: str
 
 
+@app.get("/health")
+async def health():
+    return {"status": "ok", "service": "Unified Chrome AI Browser Python API"}
+
+
 @app.post("/api/translate")
 async def translate_text(req: TranslateReq):
     """ترجمة دفعة نصية"""

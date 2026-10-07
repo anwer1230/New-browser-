@@ -1,0 +1,34 @@
+services:
+  # 1. الخدمة الرئيسية الشاملة (واجهة المتصفح الموحّد + خادم الترجمة والـ Proxy وقاعدة البيانات)
+  - type: web
+    name: new-browser-unified
+    runtime: node
+    plan: free
+    region: frankfurt
+    buildCommand: npm install --include=dev && npm run build
+    startCommand: npm run start
+    healthCheckPath: /health
+    autoDeploy: true
+    envVars:
+      - key: NODE_ENV
+        value: production
+      - key: NPM_CONFIG_PRODUCTION
+        value: "false"
+      - key: GROQ_API_KEY
+        sync: false
+
+  # 2. خادم Python FastAPI المستقل للترجمة والذكاء الاصطناعي (اختياري לתطبيق Flutter)
+  - type: web
+    name: new-browser-python-api
+    runtime: python
+    plan: free
+    region: frankfurt
+    rootDir: hybrid_browser/server
+    buildCommand: pip install -r requirements.txt
+    startCommand: uvicorn media_server:app --host 0.0.0.0 --port $PORT
+    autoDeploy: true
+    envVars:
+      - key: PYTHON_VERSION
+        value: 3.11.9
+      - key: GROQ_API_KEY
+        sync: false
