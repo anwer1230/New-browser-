@@ -2,7 +2,7 @@
   "entities": {
     "ChatSession": {
       "title": "ChatSession",
-      "description": "Represents a Hybrid AI conversation session.",
+      "description": "Represents a AnwerBrowser conversation session.",
       "type": "object",
       "properties": {
         "title": {
@@ -49,7 +49,7 @@
     },
     "ChatMessage": {
       "title": "ChatMessage",
-      "description": "Represents a single message in a Hybrid AI session with expert routing telemetry.",
+      "description": "Represents a single message in a AnwerBrowser session with expert routing telemetry.",
       "type": "object",
       "properties": {
         "sessionId": {
@@ -166,7 +166,7 @@
     },
     "UserSettings": {
       "title": "UserSettings",
-      "description": "Stores user-specific Hybrid AI configuration and mobile/web preferences.",
+      "description": "Stores user-specific AnwerBrowser configuration and mobile/web preferences.",
       "type": "object",
       "properties": {
         "ownerId": {
@@ -180,7 +180,7 @@
           "type": "string",
           "minLength": 1,
           "maxLength": 300,
-          "description": "Configured Hybrid AI API server URL"
+          "description": "Configured AnwerBrowser API server URL"
         },
         "apiKeyHint": {
           "type": "string",
@@ -466,7 +466,7 @@
   "firestore": {
     "/sessions/{sessionId}": {
       "schema": { "$ref": "#/entities/ChatSession" },
-      "description": "Stores user chat sessions for Hybrid AI."
+      "description": "Stores user chat sessions for AnwerBrowser."
     },
     "/messages/{messageId}": {
       "schema": { "$ref": "#/entities/ChatMessage" },

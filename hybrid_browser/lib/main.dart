@@ -10,11 +10,11 @@ void main() {
     systemNavigationBarColor: Color(0xFFF1F3F4),
     systemNavigationBarIconBrightness: Brightness.dark,
   ));
-  runApp(const HybridBrowserApp());
+  runApp(const AnwerBrowserApp());
 }
 
-class HybridBrowserApp extends StatelessWidget {
-  const HybridBrowserApp({super.key});
+class AnwerBrowserApp extends StatelessWidget {
+  const AnwerBrowserApp({super.key});
 
   @override
   Widget build(BuildContext context) {

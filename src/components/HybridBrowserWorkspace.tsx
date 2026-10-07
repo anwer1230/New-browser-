@@ -150,7 +150,7 @@ function buildOfflineHtml(params: { title: string; url: string; content: string 
 </html>`;
 }
 
-export const HybridBrowserWorkspace: React.FC<HybridBrowserWorkspaceProps> = ({
+export const AnwerBrowserWorkspace: React.FC<AnwerBrowserWorkspaceProps> = ({
   activeSubView,
   onChangeSubView,
   user,
@@ -1260,7 +1260,7 @@ export const HybridBrowserWorkspace: React.FC<HybridBrowserWorkspaceProps> = ({
             onClick={() => {
               showSnack(
                 vpnConnected
-                  ? `🔒 اتصال آمن HTTPS مشفّر 256-bit • حماية VPN هجينة مفعّلة (${vpnLocation})`
+                  ? `🔒 اتصال آمن HTTPS مشفّر 256-bit • حماية AnwerBrowser VPN مفعّلة (${vpnLocation})`
                   : '🔒 اتصال مشفّر ببروتوكول HTTPS آمن'
               );
             }}
@@ -2536,3 +2536,6 @@ export const HybridBrowserWorkspace: React.FC<HybridBrowserWorkspaceProps> = ({
     </div>
   );
 };
+
+export type HybridBrowserWorkspaceProps = AnwerBrowserWorkspaceProps;
+export const HybridBrowserWorkspace = AnwerBrowserWorkspace;

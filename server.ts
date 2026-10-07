@@ -3419,7 +3419,7 @@ ${snippetsContext}
             thumbnail: sampleStreams[0].thumb,
             url: `${sampleStreams[0].stream}?q=${encodeURIComponent(queryOrUrl)}_1`,
             stream_url: sampleStreams[0].stream,
-            uploader: 'AnwerBrowser Media AnwerBrowser Media Hybrid Media & Docs Docs Docs',
+            uploader: 'AnwerBrowser Media & Docs',
             view_count: 342000,
             language: 'en',
             segments: [

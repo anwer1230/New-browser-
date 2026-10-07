@@ -19,6 +19,7 @@ import {
   StoredSavedPage,
 } from './firebase';
 import {
+  AnwerBrowserWorkspace,
   HybridBrowserWorkspace,
   BrowserSectionView,
 } from './components/HybridBrowserWorkspace';
@@ -181,7 +182,7 @@ export default function App() {
       <PWAInstallBanner />
 
       {/* الواجهة الوحيدة الموحّدة مثل Chrome */}
-      <HybridBrowserWorkspace
+      <AnwerBrowserWorkspace
         activeSubView={activeSubView}
         onChangeSubView={(view) => setActiveSubView(view)}
         user={user}

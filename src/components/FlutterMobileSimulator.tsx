@@ -182,7 +182,7 @@ export const FlutterMobileSimulator: React.FC<FlutterMobileSimulatorProps> = ({
                     isDark ? 'text-slate-400' : 'text-slate-500'
                   }`}
                 >
-                  نظام ذكاء اصطناعي هجين — محلي وآمن
+                  متصفح AnwerBrowser — ذكي وآمن
                 </p>
 
                 {/* _StatusCard */}

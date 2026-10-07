@@ -228,7 +228,7 @@ export default defineConfig(() => {
           name: 'AnwerBrowser',
           short_name: 'AnwerBrowser',
           description:
-            'نظام ذكاء اصطناعي هجين وتصفح ذكي بدون إنترنت مع حماية VPN وتحميل الوسائط',
+            'متصفح AnwerBrowser وتصفح ذكي بدون إنترنت مع حماية VPN وتحميل الوسائط',
           theme_color: '#1A73E8',
           background_color: '#F8F9FA',
           display: 'standalone',

@@ -241,7 +241,7 @@ class _HomeScreenState extends State<HomeScreen>
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
                 Text(
-                  'Hybrid Browser',
+                  'AnwerBrowser',
                   style: TextStyle(
                     fontSize: 17,
                     fontWeight: FontWeight.bold,
