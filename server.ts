@@ -3599,6 +3599,7 @@ ${rawSnippet}
         proxy_url: `/api/web-proxy?url=${encodeURIComponent(targetUrl)}`,
         title: pageTitle,
         content_ar: summaryAr,
+        raw_snippet: rawSnippet,
         web_results: relatedWebResults,
         extracted_links:
           extractedLinks.length > 0

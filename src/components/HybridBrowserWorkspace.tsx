@@ -34,6 +34,7 @@ import {
   WifiOff,
   AlertTriangle,
   ExternalLink,
+  Globe,
 } from 'lucide-react';
 import { User } from 'firebase/auth';
 import {
@@ -356,6 +357,18 @@ export const AnwerBrowserWorkspace: React.FC<AnwerBrowserWorkspaceProps> = ({
     () => tabs.find((t) => t.id === activeTabId) || tabs[0],
     [tabs, activeTabId]
   );
+
+  // ═══ Direct In-App Browser Engine (متصفح مباشر لا يلتزم بالآي فريم) ═══
+  const [directEngineMode, setDirectEngineMode] = useState<boolean>(true);
+  const [directPageData, setDirectPageData] = useState<{
+    url: string;
+    title: string;
+    content_ar: string;
+    raw_snippet?: string;
+    extracted_links?: Array<{ title: string; url: string }>;
+    web_results?: any[];
+    discovered_videos?: any[];
+  } | null>(null);
 
   const [urlInput, setUrlInput] = useState<string>('https://www.google.com');
   const [urlFocused, setUrlFocused] = useState<boolean>(false);
@@ -838,6 +851,47 @@ export const AnwerBrowserWorkspace: React.FC<AnwerBrowserWorkspaceProps> = ({
     return () => window.removeEventListener('message', handleMessage);
   });
 
+  // جلب محتوى الموقع مباشرة بدون أي قيود أو حظر آي فريم
+  const fetchDirectPageContent = async (targetUrl: string) => {
+    if (
+      targetUrl === 'https://www.google.com' ||
+      targetUrl === 'https://google.com' ||
+      targetUrl === 'http://www.google.com' ||
+      targetUrl === 'http://google.com'
+    ) {
+      setDirectPageData(null);
+      setLoading(false);
+      setProgress(1);
+      return;
+    }
+
+    setLoading(true);
+    setProgress(0.5);
+    try {
+      const res = await fetch('/api/browse', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ input: targetUrl, translateToArabic: autoTranslate }),
+      });
+      if (res.ok) {
+        const data = await res.json();
+        setDirectPageData(data);
+        if (data.title) {
+          setCurrentTitle(data.title);
+          setTabs((prev) =>
+            prev.map((t) => (t.id === activeTabId ? { ...t, title: data.title } : t))
+          );
+        }
+        if (data.content_ar) {
+          setCurrentPageText(data.content_ar);
+        }
+      }
+    } catch {} finally {
+      setLoading(false);
+      setProgress(1);
+    }
+  };
+
   // ═══ Navigation (_navigate in browser_screen.dart) ═══
   const navigateTo = (rawInput: string) => {
     const text = rawInput.trim();
@@ -880,6 +934,9 @@ export const AnwerBrowserWorkspace: React.FC<AnwerBrowserWorkspaceProps> = ({
       })
     );
 
+    // تشغيل المحرك المباشر فوراً للموقع
+    fetchDirectPageContent(targetUrl);
+
     // ⚡ تسريع مؤشر التحميل 100 ضعف مقارنة بالتأخير الاصطناعي السابق (650ms)
     const timer = setInterval(() => {
       setProgress((p) => (p < 0.95 ? p + 0.35 : p));
@@ -921,6 +978,7 @@ export const AnwerBrowserWorkspace: React.FC<AnwerBrowserWorkspaceProps> = ({
   };
 
   const handleHome = () => {
+    setDirectPageData(null);
     navigateTo('https://www.google.com');
   };
 
@@ -1341,6 +1399,32 @@ export const AnwerBrowserWorkspace: React.FC<AnwerBrowserWorkspaceProps> = ({
             <Mic className="w-4 h-4" />
           </button>
 
+          {/* ⚡ زر المحرك المباشر: فتح المواقع مباشرة بدون قيود الآي فريم */}
+          <button
+            type="button"
+            onClick={() => {
+              setDirectEngineMode((prev) => !prev);
+              showSnack(
+                !directEngineMode
+                  ? '⚡ تم تفعيل المحرك المباشر: فتح المواقع مباشرة داخل التطبيق بدون قيود الآي فريم'
+                  : '🌐 تم التبديل إلى عرض الويب التفاعلي'
+              );
+            }}
+            className={`p-1.5 rounded-lg transition cursor-pointer flex items-center gap-1 ${
+              directEngineMode
+                ? 'bg-emerald-600 text-white shadow-xs'
+                : 'text-[#5F6368] hover:text-emerald-600 hover:bg-black/5 dark:hover:bg-white/10'
+            }`}
+            title={
+              directEngineMode
+                ? 'المحرك المباشر مفعّل: فتح الموقع مباشرة بدون قيود أو حظر'
+                : 'التبديل إلى المحرك المباشر بدون قيود الآي فريم'
+            }
+          >
+            <Globe className="w-3.5 h-3.5" />
+            <span className="hidden xl:inline text-[11px] font-bold">المحرك المباشر</span>
+          </button>
+
           {/* 🌟 ميزة وضع القراءة مدمجة مباشرة في شريط العناوين */}
           <button
             type="button"
@@ -1601,7 +1685,220 @@ export const AnwerBrowserWorkspace: React.FC<AnwerBrowserWorkspaceProps> = ({
               </div>
             )}
 
-            {activeTab.offlineHtml ? (
+            {/* ═══ 1. الصفحة الرئيسية (Google Home) مباشرة بدون أي إطار ═══ */}
+            {activeTab.url === 'https://www.google.com' || activeTab.url === 'https://google.com' || !activeTab.url ? (
+              <div className="w-full h-full overflow-y-auto flex flex-col items-center justify-center p-6 bg-white dark:bg-[#202124]">
+                <div className="w-full max-w-xl flex flex-col items-center text-center -mt-8">
+                  <div className="text-5xl font-extrabold tracking-tight mb-6 select-none dir-ltr">
+                    <span className="text-[#4285F4]">A</span>
+                    <span className="text-[#EA4335]">n</span>
+                    <span className="text-[#FBBC05]">w</span>
+                    <span className="text-[#4285F4]">e</span>
+                    <span className="text-[#34A853]">r</span>
+                    <span className="text-[#EA4335]">B</span>
+                    <span className="text-[#4285F4]">r</span>
+                    <span className="text-[#FBBC05]">o</span>
+                    <span className="text-[#34A853]">w</span>
+                    <span className="text-[#EA4335]">s</span>
+                    <span className="text-[#4285F4]">e</span>
+                    <span className="text-[#34A853]">r</span>
+                  </div>
+
+                  <form
+                    onSubmit={(e) => {
+                      e.preventDefault();
+                      if (urlInput.trim()) navigateTo(urlInput);
+                    }}
+                    className="w-full h-12 px-5 rounded-full border border-gray-300 dark:border-gray-700 shadow-xs focus-within:shadow-md focus-within:border-blue-500 flex items-center gap-3 bg-white dark:bg-[#303134] transition mb-6"
+                  >
+                    <Search className="w-5 h-5 text-gray-400" />
+                    <input
+                      type="text"
+                      placeholder="ابحث في Google أو اكتب عنوان موقع ويب..."
+                      onKeyDown={(e) => {
+                        if (e.key === 'Enter') {
+                          e.preventDefault();
+                          navigateTo((e.target as HTMLInputElement).value);
+                        }
+                      }}
+                      className="flex-1 bg-transparent text-sm text-[#202124] dark:text-white focus:outline-none"
+                      autoFocus
+                    />
+                    <button
+                      type="submit"
+                      className="px-3.5 py-1 rounded-full bg-blue-600 hover:bg-blue-700 text-white text-xs font-semibold"
+                    >
+                      بحث
+                    </button>
+                  </form>
+
+                  {/* اختصارات سريعة */}
+                  <div className="grid grid-cols-4 gap-4 w-full max-w-md mb-6">
+                    {[
+                      { name: 'ويكيبيديا', url: 'https://ar.wikipedia.org', icon: '📚' },
+                      { name: 'أخبار التقنية', url: 'https://news.ycombinator.com', icon: '💻' },
+                      { name: 'BBC عربي', url: 'https://www.bbc.com/arabic', icon: '🌍' },
+                      { name: 'Google بحث', url: 'https://www.google.com/search?q=الذكاء+الاصطناعي', icon: '🔍' },
+                    ].map((item) => (
+                      <button
+                        key={item.name}
+                        onClick={() => navigateTo(item.url)}
+                        className="flex flex-col items-center gap-1.5 p-3 rounded-xl hover:bg-gray-100 dark:hover:bg-white/5 transition cursor-pointer"
+                      >
+                        <div className="w-12 h-12 rounded-full bg-gray-100 dark:bg-white/10 flex items-center justify-center text-xl shadow-xs">
+                          {item.icon}
+                        </div>
+                        <span className="text-xs text-gray-700 dark:text-gray-300 font-medium">{item.name}</span>
+                      </button>
+                    ))}
+                  </div>
+
+                  <div className="px-4 py-2 rounded-full bg-emerald-50 dark:bg-emerald-950/40 border border-emerald-200 dark:border-emerald-800 text-emerald-800 dark:text-emerald-300 text-xs flex items-center gap-2">
+                    <CheckCircle2 className="w-4 h-4 text-emerald-600" />
+                    <span>متصفح ذكي مباشر: يفتح المواقع مباشرة داخل التطبيق دون قيود الآي فريم.</span>
+                  </div>
+                </div>
+              </div>
+            ) : directEngineMode && directPageData ? (
+              /* ═══ 2. المحرك المباشر داخل التطبيق (Direct In-App Web Engine) ═══ */
+              <div className="w-full h-full overflow-y-auto bg-[#F8F9FA] dark:bg-[#1A1A1A] text-[#202124] dark:text-[#E8EAED] p-4 sm:p-6">
+                <div className="max-w-4xl mx-auto space-y-5">
+                  {/* شريط معلومات الموقع وأدوات التحكم المباشرة */}
+                  <div className="bg-white dark:bg-[#242526] rounded-2xl p-4 border border-gray-200 dark:border-gray-800 shadow-xs flex flex-wrap items-center justify-between gap-3">
+                    <div className="flex items-center gap-3">
+                      <div className="w-10 h-10 rounded-full bg-blue-100 dark:bg-blue-900/40 text-blue-600 dark:text-blue-400 flex items-center justify-center shrink-0">
+                        <Globe className="w-5 h-5" />
+                      </div>
+                      <div>
+                        <h2 className="text-base font-bold text-gray-900 dark:text-white line-clamp-1">
+                          {directPageData.title || activeTab.url}
+                        </h2>
+                        <div className="flex items-center gap-2 text-xs text-gray-500 dark:text-gray-400">
+                          <span className="font-mono dir-ltr">{activeTab.url}</span>
+                          <span className="text-emerald-600 font-semibold">• محرك مباشر 🟢</span>
+                        </div>
+                      </div>
+                    </div>
+
+                    <div className="flex items-center gap-2">
+                      <button
+                        type="button"
+                        onClick={() => {
+                          setDirectEngineMode(false);
+                          showSnack('🌐 تم التبديل إلى عرض الويب التفاعلي');
+                        }}
+                        className="px-3 py-1.5 rounded-lg bg-gray-100 hover:bg-gray-200 dark:bg-white/10 dark:hover:bg-white/20 text-xs font-semibold text-gray-700 dark:text-gray-200 flex items-center gap-1.5 transition cursor-pointer"
+                        title="تبديل إلى عرض الويب التفاعلي"
+                      >
+                        <Layers className="w-3.5 h-3.5" />
+                        <span>عرض الويب التفاعلي</span>
+                      </button>
+
+                      <button
+                        type="button"
+                        onClick={() => {
+                          if (directPageData.content_ar) {
+                            onPlayTts(directPageData.content_ar);
+                            showSnack('🔊 جاري القراءة الصوتية للنص');
+                          }
+                        }}
+                        className="px-3 py-1.5 rounded-lg bg-blue-50 hover:bg-blue-100 dark:bg-blue-950/40 text-xs font-semibold text-blue-600 dark:text-blue-400 flex items-center gap-1.5 transition cursor-pointer"
+                        title="استماع صوتي"
+                      >
+                        <span>استماع</span>
+                      </button>
+
+                      <a
+                        href={activeTab.url}
+                        target="_blank"
+                        rel="noopener noreferrer"
+                        className="px-3 py-1.5 rounded-lg bg-blue-600 hover:bg-blue-700 text-xs font-semibold text-white flex items-center gap-1.5 transition shadow-xs"
+                        title="فتح الموقع في نافذة جديدة مباشرة"
+                      >
+                        <span>فتح مباشر ↗</span>
+                      </a>
+                    </div>
+                  </div>
+
+                  {/* فيديو مباشر تم اكتشافه بالصفحة إن وجد */}
+                  {Array.isArray(directPageData.discovered_videos) && directPageData.discovered_videos.length > 0 && (
+                    <div className="bg-white dark:bg-[#242526] rounded-2xl p-4 border border-gray-200 dark:border-gray-800 shadow-xs">
+                      <div className="flex items-center gap-2 mb-3">
+                        <Film className="w-4 h-4 text-rose-500" />
+                        <h3 className="text-sm font-bold text-gray-900 dark:text-white">فيديوهات تم اكتشافها في الصفحة:</h3>
+                      </div>
+                      <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                        {directPageData.discovered_videos.slice(0, 2).map((vid: any) => (
+                          <div key={vid.id} className="rounded-xl overflow-hidden border border-gray-200 dark:border-gray-800 bg-gray-50 dark:bg-black/20">
+                            {vid.stream_url ? (
+                              <video src={vid.stream_url} poster={vid.thumbnail} controls className="w-full h-40 object-cover bg-black" />
+                            ) : null}
+                            <div className="p-2.5">
+                              <p className="text-xs font-bold line-clamp-1">{vid.title}</p>
+                            </div>
+                          </div>
+                        ))}
+                      </div>
+                    </div>
+                  )}
+
+                  {/* محتوى الصفحة المترجم والمباشر */}
+                  {directPageData.content_ar && (
+                    <div className="bg-white dark:bg-[#242526] rounded-2xl p-5 border border-gray-200 dark:border-gray-800 shadow-xs">
+                      <div className="flex items-center justify-between mb-4 border-b border-gray-100 dark:border-gray-800 pb-3">
+                        <div className="flex items-center gap-2">
+                          <BookOpen className="w-4 h-4 text-blue-600" />
+                          <h3 className="text-sm font-bold text-gray-900 dark:text-white">محتوى الموقع والمقال:</h3>
+                        </div>
+                        <button
+                          type="button"
+                          onClick={handleSaveCurrentPage}
+                          className="text-xs text-blue-600 hover:underline flex items-center gap-1 cursor-pointer"
+                        >
+                          <Bookmark className="w-3.5 h-3.5" />
+                          <span>حفظ للقراءة بدون إنترنت</span>
+                        </button>
+                      </div>
+
+                      <div className="text-sm leading-relaxed text-gray-800 dark:text-gray-200 whitespace-pre-line space-y-3">
+                        {directPageData.content_ar}
+                      </div>
+                    </div>
+                  )}
+
+                  {/* الروابط التفاعلية التابعة للموقع (التنقل المباشر بالضغط) */}
+                  {Array.isArray(directPageData.extracted_links) && directPageData.extracted_links.length > 0 && (
+                    <div className="bg-white dark:bg-[#242526] rounded-2xl p-5 border border-gray-200 dark:border-gray-800 shadow-xs">
+                      <div className="flex items-center gap-2 mb-3">
+                        <Sparkles className="w-4 h-4 text-amber-500" />
+                        <h3 className="text-sm font-bold text-gray-900 dark:text-white">
+                          صفحات وروابط داخل الموقع (اضغط للتنقل المباشر):
+                        </h3>
+                      </div>
+
+                      <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 gap-2.5">
+                        {directPageData.extracted_links.map((link: any, idx: number) => (
+                          <button
+                            key={idx}
+                            type="button"
+                            onClick={() => navigateTo(link.url)}
+                            className="p-3 rounded-xl border border-gray-200 dark:border-gray-700/60 hover:border-blue-500 hover:bg-blue-50/50 dark:hover:bg-blue-950/20 text-right transition cursor-pointer flex flex-col justify-between"
+                          >
+                            <span className="text-xs font-bold text-gray-900 dark:text-white line-clamp-2 mb-1">
+                              {link.title}
+                            </span>
+                            <span className="text-[10px] text-blue-600 font-mono truncate dir-ltr text-left">
+                              {link.url}
+                            </span>
+                          </button>
+                        ))}
+                      </div>
+                    </div>
+                  )}
+                </div>
+              </div>
+            ) : activeTab.offlineHtml ? (
+              /* ═══ 3. وضع القراءة بدون إنترنت المحفوظ ═══ */
               <iframe
                 ref={iframeRef}
                 name="anwer_browser_web_frame"
@@ -1612,6 +1909,7 @@ export const AnwerBrowserWorkspace: React.FC<AnwerBrowserWorkspaceProps> = ({
                 allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture; web-share; fullscreen"
               />
             ) : (
+              /* ═══ 4. عرض الويب التفاعلي المباشر مع البروكسي ═══ */
               <iframe
                 ref={iframeRef}
                 name="anwer_browser_web_frame"
