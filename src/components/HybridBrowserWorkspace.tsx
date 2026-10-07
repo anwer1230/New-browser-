@@ -26,6 +26,8 @@ import {
   Smartphone,
   Play,
   Film,
+  History,
+  Database,
 } from 'lucide-react';
 import { User } from 'firebase/auth';
 import {
@@ -37,6 +39,12 @@ import {
 } from '../firebase';
 import { VideoDownloadPermissionModal } from './VideoDownloadPermissionModal';
 import { usePWAInstall } from './usePWAInstall';
+import {
+  ComprehensiveHistoryDrawer,
+  WatchHistoryEntry,
+  BrowseHistoryEntry,
+} from './ComprehensiveHistoryDrawer';
+import { FiveDatabasesApprovalModal } from './FiveDatabasesApprovalModal';
 
 export type BrowserSectionView =
   | 'home'
@@ -256,6 +264,60 @@ export const HybridBrowserWorkspace: React.FC<HybridBrowserWorkspaceProps> = ({
   });
   const [savedSheetTab, setSavedSheetTab] = useState<'pages' | 'videos'>('pages');
 
+  // ═══ Comprehensive History & 5 Databases State ═══
+  const [isComprehensiveHistoryOpen, setIsComprehensiveHistoryOpen] = useState(false);
+  const [isFiveDatabasesModalOpen, setIsFiveDatabasesModalOpen] = useState(false);
+  const [watchHistoryList, setWatchHistoryList] = useState<WatchHistoryEntry[]>([]);
+  const [browseHistoryList, setBrowseHistoryList] = useState<BrowseHistoryEntry[]>([]);
+
+  const refreshComprehensiveHistory = async () => {
+    try {
+      const [wRes, bRes] = await Promise.all([
+        fetch('/api/watch-history'),
+        fetch('/api/browse-history'),
+      ]);
+      if (wRes.ok) {
+        const wData = await wRes.json();
+        if (Array.isArray(wData.items)) {
+          setWatchHistoryList(wData.items);
+        }
+      }
+      if (bRes.ok) {
+        const bData = await bRes.json();
+        if (Array.isArray(bData.items)) {
+          setBrowseHistoryList(bData.items);
+        }
+      }
+    } catch {}
+  };
+
+  useEffect(() => {
+    refreshComprehensiveHistory();
+  }, []);
+
+  const handleDeleteWatchHistoryItem = async (id: string) => {
+    try {
+      await fetch(`/api/watch-history/${encodeURIComponent(id)}`, { method: 'DELETE' });
+    } catch {}
+    setWatchHistoryList((prev) => prev.filter((i) => i.id !== id && i.videoId !== id));
+  };
+
+  const handleDeleteBrowseHistoryItem = async (id: string) => {
+    try {
+      await fetch(`/api/browse-history/${encodeURIComponent(id)}`, { method: 'DELETE' });
+    } catch {}
+    setBrowseHistoryList((prev) => prev.filter((i) => i.id !== id && i.url !== id));
+  };
+
+  const handleClearAllHistory = async () => {
+    try {
+      await fetch('/api/clear-history?type=all', { method: 'DELETE' });
+    } catch {}
+    setWatchHistoryList([]);
+    setBrowseHistoryList([]);
+    showSnack('🗑 تم مسح السجل بنجاح');
+  };
+
   const iframeRef = useRef<HTMLIFrameElement>(null);
   const urlInputRef = useRef<HTMLInputElement>(null);
 
@@ -383,6 +445,12 @@ export const HybridBrowserWorkspace: React.FC<HybridBrowserWorkspaceProps> = ({
         }
         if (data.textContent) {
           setCurrentPageText(String(data.textContent));
+        }
+        refreshComprehensiveHistory();
+      } else if (data.type === 'HYBRID_BROWSER_VIDEO_PLAYING') {
+        refreshComprehensiveHistory();
+        if (data.title) {
+          showSnack(`🎬 تم حفظ «${data.title}» في السجل (متاح بدون إنترنت)`);
         }
       } else if (data.type === 'HYBRID_BROWSER_TRANSLATED') {
         if (data.content) {
@@ -838,6 +906,26 @@ export const HybridBrowserWorkspace: React.FC<HybridBrowserWorkspaceProps> = ({
           )}
         </form>
 
+        {/* زر السجل الشامل والمشاهدات بدون إنترنت */}
+        <button
+          type="button"
+          onClick={() => {
+            refreshComprehensiveHistory();
+            setIsComprehensiveHistoryOpen(true);
+          }}
+          className={`p-2 rounded-full transition-colors cursor-pointer relative ${
+            darkMode
+              ? 'text-[#E8EAED] hover:bg-[#303134]'
+              : 'text-[#5F6368] hover:bg-[#E8EAED]/60'
+          }`}
+          title="سجل المشاهدة والتصفح (يعمل بدون إنترنت)"
+        >
+          <History className="w-5 h-5" />
+          {watchHistoryList.length > 0 && (
+            <span className="absolute top-1.5 right-1.5 w-2 h-2 rounded-full bg-emerald-500 animate-pulse" />
+          )}
+        </button>
+
         {/* زر القائمة الثلاثية (⋮) */}
         <button
           type="button"
@@ -975,6 +1063,24 @@ export const HybridBrowserWorkspace: React.FC<HybridBrowserWorkspaceProps> = ({
           )}
         </button>
 
+        {/* زر السجل الشامل 🕒 (مشاهدات الفيديوهات والتصفح بدون إنترنت) */}
+        <button
+          type="button"
+          onClick={() => {
+            refreshComprehensiveHistory();
+            setIsComprehensiveHistoryOpen(true);
+          }}
+          className="relative p-3 rounded-full text-[#5F6368] hover:bg-black/5 cursor-pointer"
+          title="السجل الشامل — مشاهدات وتصفح متاح بدون إنترنت"
+        >
+          <History className="w-[21px] h-[21px]" />
+          {watchHistoryList.length + browseHistoryList.length > 0 && (
+            <span className="absolute top-1.5 left-1.5 min-w-[16px] h-4 px-1 rounded-full bg-emerald-600 text-white text-[10px] font-bold flex items-center justify-center">
+              {watchHistoryList.length + browseHistoryList.length}
+            </span>
+          )}
+        </button>
+
         {/* زر التبويبات */}
         <button
           type="button"
@@ -1101,6 +1207,53 @@ export const HybridBrowserWorkspace: React.FC<HybridBrowserWorkspaceProps> = ({
                   <div className="text-[15px] font-medium">المحفوظات</div>
                   <div className="text-[12px] text-[#5F6368]">
                     {allSavedPages.length} عنصر محفوظ — متاح بدون إنترنت
+                  </div>
+                </div>
+              </button>
+
+              {/* 5a. السجل الشامل (مشاهدات وتصفح بدون إنترنت) */}
+              <button
+                type="button"
+                onClick={() => {
+                  setIsMenuOpen(false);
+                  refreshComprehensiveHistory();
+                  setIsComprehensiveHistoryOpen(true);
+                }}
+                className="w-full px-5 py-3.5 flex items-center gap-4 hover:bg-black/5 text-right cursor-pointer"
+              >
+                <History className="w-5 h-5 text-emerald-600 shrink-0" />
+                <div>
+                  <div className="text-[15px] font-medium flex items-center gap-2">
+                    <span>السجل الشامل (المشاهدة والتصفح)</span>
+                    <span className="px-1.5 py-0.5 rounded text-[10px] bg-emerald-100 text-emerald-800 font-bold">
+                      متاح offline 💾
+                    </span>
+                  </div>
+                  <div className="text-[12px] text-[#5F6368]">
+                    {watchHistoryList.length} فيديو محفوظ للمشاهدة بدون إنترنت • {browseHistoryList.length} موقع
+                  </div>
+                </div>
+              </button>
+
+              {/* 5a2. قواعد البيانات الخمس واعتمادها */}
+              <button
+                type="button"
+                onClick={() => {
+                  setIsMenuOpen(false);
+                  setIsFiveDatabasesModalOpen(true);
+                }}
+                className="w-full px-5 py-3.5 flex items-center gap-4 hover:bg-black/5 text-right cursor-pointer"
+              >
+                <Database className="w-5 h-5 text-indigo-600 shrink-0" />
+                <div>
+                  <div className="text-[15px] font-medium flex items-center gap-2">
+                    <span>قواعد البيانات الخمس (حفظ الفيديوهات والسجل)</span>
+                    <span className="px-1.5 py-0.5 rounded text-[10px] bg-indigo-100 text-indigo-800 font-bold">
+                      5 قواعد نشطة ⚡
+                    </span>
+                  </div>
+                  <div className="text-[12px] text-[#5F6368]">
+                    إدارة واعتماد قواعد التخزين المحلي، التدفق، والنسخ السحابي
                   </div>
                 </div>
               </button>
@@ -1605,6 +1758,40 @@ export const HybridBrowserWorkspace: React.FC<HybridBrowserWorkspaceProps> = ({
           </button>
         </div>
       )}
+
+      {/* ═══ درج السجل الشامل (مشاهدات الفيديوهات والتصفح وتشغيل أوفلاين) ═══ */}
+      <ComprehensiveHistoryDrawer
+        isOpen={isComprehensiveHistoryOpen}
+        onClose={() => setIsComprehensiveHistoryOpen(false)}
+        watchHistory={watchHistoryList}
+        browseHistory={browseHistoryList}
+        onPlayVideo={(videoUrl, title) => {
+          setIsComprehensiveHistoryOpen(false);
+          navigateTo(videoUrl);
+          showSnack(`▶ تشغيل «${title}» من السجل المحفوظ (يعمل بدون إنترنت)`);
+        }}
+        onOpenPage={(url) => {
+          setIsComprehensiveHistoryOpen(false);
+          navigateTo(url);
+        }}
+        onRequestDownload={(videoUrl, title) => {
+          setDownloadModalVideo({ url: videoUrl, title });
+        }}
+        onDeleteWatchItem={handleDeleteWatchHistoryItem}
+        onDeleteBrowseItem={handleDeleteBrowseHistoryItem}
+        onClearAllHistory={handleClearAllHistory}
+        onOpenDatabasesModal={() => setIsFiveDatabasesModalOpen(true)}
+      />
+
+      {/* ═══ نافذة إذن واعتماد قواعد البيانات الخمس لحفظ الفيديوهات والسجل ═══ */}
+      <FiveDatabasesApprovalModal
+        isOpen={isFiveDatabasesModalOpen}
+        onClose={() => setIsFiveDatabasesModalOpen(false)}
+        onApproved={() => {
+          showSnack('⚡ تم اعتماد وتأكيد جاهزية قواعد البيانات الخمس لحفظ الفيديوهات');
+          refreshComprehensiveHistory();
+        }}
+      />
     </div>
   );
 };
