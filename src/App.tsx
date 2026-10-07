@@ -23,6 +23,7 @@ import {
   BrowserSectionView,
 } from './components/HybridBrowserWorkspace';
 import { InfrastructureApprovalModal } from './components/InfrastructureApprovalModal';
+import { PWAInstallBanner } from './components/PWAInstallBanner';
 
 export default function App() {
   const [activeSubView, setActiveSubView] = useState<BrowserSectionView>('home');
@@ -151,6 +152,9 @@ export default function App() {
       className="h-screen w-screen overflow-hidden flex flex-col bg-[#F8F9FA] text-[#202124]"
       style={{ fontFamily: "'Cairo', 'Segoe UI', Tahoma, sans-serif" }}
     >
+      {/* إشعار تثبيت التطبيق PWA مثل AI Studio */}
+      <PWAInstallBanner />
+
       {/* الواجهة الوحيدة الموحّدة مثل Chrome */}
       <HybridBrowserWorkspace
         activeSubView={activeSubView}

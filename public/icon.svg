@@ -1,0 +1,22 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512" fill="none">
+  <defs>
+    <linearGradient id="pwa-grad" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" stop-color="#1A73E8"/>
+      <stop offset="100%" stop-color="#0D47A1"/>
+    </linearGradient>
+    <filter id="shadow" x="-20%" y="-20%" width="140%" height="140%">
+      <feDropShadow dx="0" dy="8" stdDeviation="12" flood-color="#000000" flood-opacity="0.25"/>
+    </filter>
+  </defs>
+  <!-- Background with squircle radius -->
+  <rect width="512" height="512" rx="112" fill="url(#pwa-grad)"/>
+  <!-- Decorative globe latitude/longitude lines -->
+  <circle cx="256" cy="256" r="160" stroke="#FFFFFF" stroke-opacity="0.3" stroke-width="8" fill="none"/>
+  <ellipse cx="256" cy="256" rx="80" ry="160" stroke="#FFFFFF" stroke-opacity="0.25" stroke-width="8" fill="none"/>
+  <line x1="96" y1="256" x2="416" y2="256" stroke="#FFFFFF" stroke-opacity="0.25" stroke-width="8"/>
+  <!-- Central AI Sparkle / Compass Symbol -->
+  <g filter="url(#shadow)">
+    <path d="M256 128 C256 192 208 240 144 240 C208 240 256 288 256 352 C256 288 304 240 368 240 C304 240 256 192 256 128 Z" fill="#FFFFFF"/>
+    <circle cx="256" cy="240" r="28" fill="#FBBC04"/>
+  </g>
+</svg>

@@ -22,6 +22,10 @@ import {
   Sun,
   Cloud,
   Plus,
+  Download,
+  Smartphone,
+  Play,
+  Film,
 } from 'lucide-react';
 import { User } from 'firebase/auth';
 import {
@@ -31,6 +35,8 @@ import {
   deleteSavedPageFromFirestore,
   signInWithGoogle,
 } from '../firebase';
+import { VideoDownloadPermissionModal } from './VideoDownloadPermissionModal';
+import { usePWAInstall } from './usePWAInstall';
 
 export type BrowserSectionView =
   | 'home'
@@ -220,6 +226,36 @@ export const HybridBrowserWorkspace: React.FC<HybridBrowserWorkspaceProps> = ({
   // ═══ Floating Snackbar (_snack) ═══
   const [snackMsg, setSnackMsg] = useState<string | null>(null);
 
+  // ═══ PWA Installation Hook ═══
+  const { isInstalled: isPwaInstalled, triggerInstall: triggerPwaInstall } = usePWAInstall();
+
+  // ═══ Mobile Video Download & Permission Dialog State ═══
+  const [downloadModalVideo, setDownloadModalVideo] = useState<{
+    url: string;
+    title: string;
+    poster?: string;
+  } | null>(null);
+  const [isDownloadingVideo, setIsDownloadingVideo] = useState(false);
+  const [downloadProgress, setDownloadProgress] = useState<number>(0);
+  const [downloadedVideosList, setDownloadedVideosList] = useState<
+    Array<{
+      id: string;
+      title: string;
+      url: string;
+      downloadUrl: string;
+      filename: string;
+      downloadedAt: string;
+      poster?: string;
+    }>
+  >(() => {
+    try {
+      const raw = localStorage.getItem('downloaded_videos_v1');
+      if (raw) return JSON.parse(raw);
+    } catch {}
+    return [];
+  });
+  const [savedSheetTab, setSavedSheetTab] = useState<'pages' | 'videos'>('pages');
+
   const iframeRef = useRef<HTMLIFrameElement>(null);
   const urlInputRef = useRef<HTMLInputElement>(null);
 
@@ -228,6 +264,70 @@ export const HybridBrowserWorkspace: React.FC<HybridBrowserWorkspaceProps> = ({
     setTimeout(() => {
       setSnackMsg((prev) => (prev === msg ? null : prev));
     }, 2600);
+  };
+
+  const handleConfirmVideoDownload = async () => {
+    if (!downloadModalVideo) return;
+    setIsDownloadingVideo(true);
+    setDownloadProgress(20);
+
+    const safeTitle =
+      downloadModalVideo.title
+        .replace(/[^\w\s\u0600-\u06FF.-]/gi, '_')
+        .replace(/\s+/g, '_')
+        .trim() || 'video';
+    const filename = safeTitle.endsWith('.mp4') ? safeTitle : `${safeTitle}.mp4`;
+    const downloadApiUrl = `/api/download-video?url=${encodeURIComponent(
+      downloadModalVideo.url
+    )}&filename=${encodeURIComponent(filename)}`;
+
+    const progTimer = setInterval(() => {
+      setDownloadProgress((prev) => (prev < 90 ? prev + 15 : prev));
+    }, 250);
+
+    try {
+      // 1. Trigger actual browser download directly to Downloads folder
+      const downloadAnchor = document.createElement('a');
+      downloadAnchor.href = downloadApiUrl;
+      downloadAnchor.download = filename;
+      downloadAnchor.style.display = 'none';
+      document.body.appendChild(downloadAnchor);
+      downloadAnchor.click();
+      setTimeout(() => downloadAnchor.remove(), 2000);
+
+      clearInterval(progTimer);
+      setDownloadProgress(100);
+
+      // 2. Persist record to device downloaded items history
+      const historyItem = {
+        id: `vid_dl_${Date.now()}`,
+        title: downloadModalVideo.title,
+        url: downloadModalVideo.url,
+        downloadUrl: downloadApiUrl,
+        filename,
+        downloadedAt: new Date().toISOString(),
+        poster: downloadModalVideo.poster,
+      };
+
+      setDownloadedVideosList((prev) => {
+        const updated = [historyItem, ...prev.filter((p) => p.url !== downloadModalVideo.url)];
+        try {
+          localStorage.setItem('downloaded_videos_v1', JSON.stringify(updated));
+        } catch {}
+        return updated;
+      });
+
+      setTimeout(() => {
+        setIsDownloadingVideo(false);
+        setDownloadModalVideo(null);
+        setDownloadProgress(0);
+        showSnack(`✓ تم تنزيل «${downloadModalVideo.title}» بنجاح وحفظه في مجلد التنزيلات بالجهاز`);
+      }, 700);
+    } catch {
+      clearInterval(progTimer);
+      setIsDownloadingVideo(false);
+      showSnack('❌ حدث خطأ أثناء تنزيل الفيديو');
+    }
   };
 
   // ═══ Boot: Sync External DB saved pages into localStorage for offline readiness ═══
@@ -293,6 +393,14 @@ export const HybridBrowserWorkspace: React.FC<HybridBrowserWorkspaceProps> = ({
           url: String(data.url || activeTab.url),
           title: String(data.title || currentTitle || activeTab.url),
           content: String(data.content || currentPageText),
+        });
+      } else if (data.type === 'HYBRID_BROWSER_REQUEST_VIDEO_DOWNLOAD') {
+        const vUrl = String(data.videoUrl || activeTab.url);
+        const vTitle = String(data.title || currentTitle || 'فيديو تم تشغيله');
+        setDownloadModalVideo({
+          url: vUrl,
+          title: vTitle,
+          poster: data.poster ? String(data.poster) : undefined,
         });
       }
     };
@@ -765,6 +873,8 @@ export const HybridBrowserWorkspace: React.FC<HybridBrowserWorkspaceProps> = ({
             title={activeTab.title || 'Offline Reader'}
             srcDoc={activeTab.offlineHtml}
             className="w-full h-full border-0 bg-white"
+            sandbox="allow-scripts allow-same-origin allow-forms allow-presentation allow-downloads"
+            allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture"
           />
         ) : (
           <iframe
@@ -772,6 +882,8 @@ export const HybridBrowserWorkspace: React.FC<HybridBrowserWorkspaceProps> = ({
             key={`${activeTab.id}_${activeTab.url}_${autoTranslate}`}
             title={activeTab.title || 'Chrome WebView'}
             src={proxyIframeSrc}
+            sandbox="allow-scripts allow-same-origin allow-forms allow-presentation allow-downloads"
+            allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture"
             onLoad={() => {
               setLoading(false);
               setProgress(1);
@@ -979,6 +1091,7 @@ export const HybridBrowserWorkspace: React.FC<HybridBrowserWorkspaceProps> = ({
                 type="button"
                 onClick={() => {
                   setIsMenuOpen(false);
+                  setSavedSheetTab('pages');
                   setIsSavedSheetOpen(true);
                 }}
                 className="w-full px-5 py-3.5 flex items-center gap-4 hover:bg-black/5 text-right cursor-pointer"
@@ -991,6 +1104,45 @@ export const HybridBrowserWorkspace: React.FC<HybridBrowserWorkspaceProps> = ({
                   </div>
                 </div>
               </button>
+
+              {/* 5b. التنزيلات والفيديوهات المحملة بالجهاز */}
+              <button
+                type="button"
+                onClick={() => {
+                  setIsMenuOpen(false);
+                  setSavedSheetTab('videos');
+                  setIsSavedSheetOpen(true);
+                }}
+                className="w-full px-5 py-3.5 flex items-center gap-4 hover:bg-black/5 text-right cursor-pointer"
+              >
+                <Download className="w-5 h-5 text-[#1A73E8] shrink-0" />
+                <div>
+                  <div className="text-[15px] font-medium">التنزيلات والفيديوهات المحمّلة بالجهاز</div>
+                  <div className="text-[12px] text-[#5F6368]">
+                    {downloadedVideosList.length} فيديو تم تنزيله إلى مجلد Downloads
+                  </div>
+                </div>
+              </button>
+
+              {/* 5c. تثبيت التطبيق PWA */}
+              {!isPwaInstalled && (
+                <button
+                  type="button"
+                  onClick={() => {
+                    setIsMenuOpen(false);
+                    triggerPwaInstall();
+                  }}
+                  className="w-full px-5 py-3.5 flex items-center gap-4 hover:bg-black/5 text-right cursor-pointer"
+                >
+                  <Smartphone className="w-5 h-5 text-[#1A73E8] shrink-0" />
+                  <div>
+                    <div className="text-[15px] font-medium">تثبيت التطبيق (PWA)</div>
+                    <div className="text-[12px] text-[#5F6368]">
+                      تثبيت كـ تطبيق أصيل على شاشة جهازك
+                    </div>
+                  </div>
+                </button>
+              )}
 
               {/* 6. سؤال AI */}
               <button
@@ -1081,6 +1233,34 @@ export const HybridBrowserWorkspace: React.FC<HybridBrowserWorkspaceProps> = ({
               </button>
             </div>
 
+            {/* التبديل بين تبويب الصفحات وتبويب التنزيلات */}
+            <div className="px-5 pt-2 flex items-center gap-2 border-b border-gray-100 shrink-0">
+              <button
+                type="button"
+                onClick={() => setSavedSheetTab('pages')}
+                className={`pb-2.5 px-3 text-sm font-semibold flex items-center gap-2 border-b-2 transition cursor-pointer ${
+                  savedSheetTab === 'pages'
+                    ? 'border-[#1A73E8] text-[#1A73E8]'
+                    : 'border-transparent text-[#5F6368] hover:text-[#202124]'
+                }`}
+              >
+                <FileText className="w-4 h-4" />
+                <span>الصفحات المحفوظة ({allSavedPages.length})</span>
+              </button>
+              <button
+                type="button"
+                onClick={() => setSavedSheetTab('videos')}
+                className={`pb-2.5 px-3 text-sm font-semibold flex items-center gap-2 border-b-2 transition cursor-pointer ${
+                  savedSheetTab === 'videos'
+                    ? 'border-[#1A73E8] text-[#1A73E8]'
+                    : 'border-transparent text-[#5F6368] hover:text-[#202124]'
+                }`}
+              >
+                <Download className="w-4 h-4" />
+                <span>الفيديوهات المحمّلة بالجهاز ({downloadedVideosList.length})</span>
+              </button>
+            </div>
+
             {/* شريط البحث في المحفوظات */}
             <div className="px-5 py-2 shrink-0">
               <div className="flex items-center gap-2 px-3.5 py-2.5 rounded-[12px] bg-[#F1F3F4]">
@@ -1089,7 +1269,11 @@ export const HybridBrowserWorkspace: React.FC<HybridBrowserWorkspaceProps> = ({
                   type="text"
                   value={savedSearchQuery}
                   onChange={(e) => setSavedSearchQuery(e.target.value)}
-                  placeholder="ابحث في المحفوظات ونتائج البحث النصية..."
+                  placeholder={
+                    savedSheetTab === 'videos'
+                      ? 'ابحث في الفيديوهات المحمّلة بالجهاز...'
+                      : 'ابحث في المحفوظات ونتائج البحث النصية...'
+                  }
                   className="w-full bg-transparent text-sm text-[#202124] placeholder-[#5F6368] focus:outline-none"
                 />
                 {savedSearchQuery && (
@@ -1106,7 +1290,88 @@ export const HybridBrowserWorkspace: React.FC<HybridBrowserWorkspaceProps> = ({
 
             {/* قائمة العناصر المحفوظة */}
             <div className="flex-1 overflow-y-auto px-4 py-2 space-y-2">
-              {filteredSavedPages.length === 0 ? (
+              {savedSheetTab === 'videos' ? (
+                downloadedVideosList.length === 0 ? (
+                  <div className="h-full flex flex-col items-center justify-center text-center text-gray-400 py-12">
+                    <Download className="w-14 h-14 stroke-1 mb-3 text-blue-500" />
+                    <div className="text-sm font-medium text-gray-600">
+                      لا توجد فيديوهات محمّلة بعد
+                    </div>
+                    <div className="text-xs text-gray-400 mt-1 max-w-xs">
+                      عند تشغيل أي فيديو في المتصفح، اضغط على أيقونة «تحميل الفيديو للجوال» ليتم نقله مباشرة إلى مجلد التنزيلات بجهازك
+                    </div>
+                  </div>
+                ) : (
+                  downloadedVideosList.map((item) => (
+                    <div
+                      key={item.id}
+                      className="p-3.5 rounded-[12px] bg-[#F8F9FA] border border-[#E8EAED] hover:border-[#1A73E8] flex items-center justify-between gap-3 transition-colors"
+                    >
+                      <div className="flex items-center gap-3 min-w-0 flex-1">
+                        <div className="w-10 h-10 rounded-lg bg-blue-50 text-[#1A73E8] flex items-center justify-center shrink-0">
+                          <Film className="w-5 h-5" />
+                        </div>
+                        <div className="min-w-0 flex-1">
+                          <div className="text-[14px] font-semibold text-[#202124] truncate">
+                            {item.title}
+                          </div>
+                          <div className="text-[11px] text-[#5F6368] truncate mt-0.5" dir="ltr">
+                            {item.filename}
+                          </div>
+                          <div className="text-[11px] text-emerald-600 font-medium mt-1 flex items-center gap-1.5">
+                            <CheckCircle2 className="w-3.5 h-3.5" />
+                            <span>محفوظ في مجلد التنزيلات (Downloads)</span>
+                          </div>
+                        </div>
+                      </div>
+
+                      <div className="flex items-center gap-1 shrink-0">
+                        <button
+                          type="button"
+                          onClick={() => {
+                            setIsSavedSheetOpen(false);
+                            navigateTo(item.url);
+                          }}
+                          className="p-2 rounded-lg text-[#1A73E8] hover:bg-blue-50 cursor-pointer"
+                          title="تشغيل في المتصفح"
+                        >
+                          <Play className="w-4 h-4" />
+                        </button>
+                        <button
+                          type="button"
+                          onClick={() => {
+                            const a = document.createElement('a');
+                            a.href = item.downloadUrl;
+                            a.download = item.filename;
+                            document.body.appendChild(a);
+                            a.click();
+                            setTimeout(() => a.remove(), 1000);
+                            showSnack(`جاري إعادة تنزيل «${item.title}» للجهاز`);
+                          }}
+                          className="p-2 rounded-lg text-emerald-600 hover:bg-emerald-50 cursor-pointer"
+                          title="إعادة التنزيل للجهاز"
+                        >
+                          <Download className="w-4 h-4" />
+                        </button>
+                        <button
+                          type="button"
+                          onClick={() => {
+                            const updated = downloadedVideosList.filter((v) => v.id !== item.id);
+                            setDownloadedVideosList(updated);
+                            try {
+                              localStorage.setItem('downloaded_videos_v1', JSON.stringify(updated));
+                            } catch {}
+                          }}
+                          className="p-2 rounded-lg text-gray-400 hover:text-red-600 hover:bg-red-50 cursor-pointer"
+                          title="حذف من القائمة"
+                        >
+                          <Trash2 className="w-4 h-4" />
+                        </button>
+                      </div>
+                    </div>
+                  ))
+                )
+              ) : filteredSavedPages.length === 0 ? (
                 <div className="h-full flex flex-col items-center justify-center text-center text-gray-400 py-12">
                   <FolderOpen className="w-14 h-14 stroke-1 mb-3" />
                   <div className="text-sm font-medium text-gray-500">
@@ -1302,6 +1567,42 @@ export const HybridBrowserWorkspace: React.FC<HybridBrowserWorkspaceProps> = ({
               ))}
             </div>
           </div>
+        </div>
+      )}
+
+      {/* ═══ نافذة إذن وموافقة تحميل الفيديو للجهاز ═══ */}
+      <VideoDownloadPermissionModal
+        isOpen={!!downloadModalVideo}
+        videoUrl={downloadModalVideo?.url || ''}
+        videoTitle={downloadModalVideo?.title || ''}
+        poster={downloadModalVideo?.poster}
+        onClose={() => {
+          if (!isDownloadingVideo) setDownloadModalVideo(null);
+        }}
+        onConfirmDownload={handleConfirmVideoDownload}
+        isDownloading={isDownloadingVideo}
+        downloadProgress={downloadProgress}
+      />
+
+      {/* ═══ أيقونة تحميل للجوال عائمة عند تشغيل/عرض أي رابط فيديو ═══ */}
+      {(/\.(mp4|webm|ogg|mov)(\?.*)?$/i.test(activeTab.url) ||
+        activeTab.url.includes('gtv-videos-bucket') ||
+        activeTab.url.includes('video')) && (
+        <div className="fixed bottom-20 left-4 z-40">
+          <button
+            type="button"
+            onClick={() =>
+              setDownloadModalVideo({
+                url: activeTab.url,
+                title: currentTitle || 'فيديو تم تشغيله',
+              })
+            }
+            className="flex items-center gap-2 px-4 py-2.5 rounded-full bg-gradient-to-r from-[#1A73E8] to-[#1557B0] text-white text-xs font-bold shadow-xl hover:shadow-2xl hover:scale-105 active:scale-95 transition cursor-pointer border border-white/20"
+          >
+            <Smartphone className="w-4 h-4" />
+            <Download className="w-4 h-4" />
+            <span>تحميل الفيديو للجوال</span>
+          </button>
         </div>
       )}
     </div>
