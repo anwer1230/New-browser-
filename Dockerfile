@@ -2,9 +2,9 @@ FROM node:22-slim
 
 WORKDIR /app
 
-# نسخ ملفات الحزم وتثبيت جميع الاعتماديات (بما فيها أدوات البناء)
-COPY package.json ./
-RUN npm install --include=dev
+# نسخ إعدادات npm وملف الحزم وتثبيت جميع الاعتماديات مع تجاوز تعارضات peer dependencies
+COPY package.json .npmrc ./
+RUN npm install --include=dev --legacy-peer-deps
 
 # نسخ كامل ملفات المشروع
 COPY . .

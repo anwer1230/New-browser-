@@ -5,7 +5,7 @@ services:
     runtime: node
     plan: free
     region: frankfurt
-    buildCommand: npm install --include=dev && npm run build
+    buildCommand: npm install --include=dev --legacy-peer-deps && npm run build
     startCommand: npm run start
     healthCheckPath: /health
     autoDeploy: true
@@ -14,10 +14,12 @@ services:
         value: production
       - key: NPM_CONFIG_PRODUCTION
         value: "false"
+      - key: NPM_CONFIG_LEGACY_PEER_DEPS
+        value: "true"
       - key: GROQ_API_KEY
         sync: false
 
-  # 2. خادم Python FastAPI المستقل للترجمة والذكاء الاصطناعي (اختياري לתطبيق Flutter)
+  # 2. خادم Python FastAPI المستقل للترجمة والذكاء الاصطناعي (اختياري لتطبيق Flutter)
   - type: web
     name: new-browser-python-api
     runtime: python
