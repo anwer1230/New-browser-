@@ -1,5 +1,5 @@
 name: hybrid_browser
-description: AI Browser + Media Translator + VPN
+description: متصفح موحّد مع AI وترجمة وحفظ offline
 version: 1.0.0+1
 
 environment:
@@ -8,15 +8,11 @@ environment:
 dependencies:
   flutter:
     sdk: flutter
-  google_fonts: ^6.2.1
   webview_flutter: ^4.10.0
   http: ^1.2.2
-  video_player: ^2.9.2
-  chewie: ^1.8.5
-  path_provider: ^2.1.5
   shared_preferences: ^2.3.3
-  file_picker: ^8.1.4
+  path_provider: ^2.1.5
   url_launcher: ^6.3.1
-  provider: ^6.1.2
-  speech_to_text: ^7.0.0
-  permission_handler: ^11.3.1
+
+flutter:
+  uses-material-design: true

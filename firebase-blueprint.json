@@ -404,6 +404,63 @@
         "createdAt",
         "updatedAt"
       ]
+    },
+    "SavedPage": {
+      "title": "SavedPage",
+      "description": "Stores saved web pages and text search results for offline reading and cross-device sync.",
+      "type": "object",
+      "properties": {
+        "ownerId": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 128,
+          "pattern": "^[a-zA-Z0-9_\\-]+$",
+          "description": "UID of the user who saved the page"
+        },
+        "url": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 1000,
+          "description": "Page URL or search query URL"
+        },
+        "title": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 300,
+          "description": "Page title or search query title"
+        },
+        "content": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 50000,
+          "description": "Full text content or search results text"
+        },
+        "translation": {
+          "type": "string",
+          "maxLength": 50000,
+          "description": "Translated Arabic content"
+        },
+        "savedAt": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 100,
+          "description": "ISO timestamp when saved"
+        },
+        "createdAt": {
+          "type": "string",
+          "format": "date-time",
+          "description": "Firestore creation timestamp"
+        }
+      },
+      "required": [
+        "ownerId",
+        "url",
+        "title",
+        "content",
+        "translation",
+        "savedAt",
+        "createdAt"
+      ]
     }
   },
   "firestore": {
@@ -430,6 +487,10 @@
     "/cloud_infrastructure/{infraId}": {
       "schema": { "$ref": "#/entities/CloudInfrastructure" },
       "description": "Stores provisioned Oracle Cloud Instance, WireGuard VPN, and Groq status."
+    },
+    "/saved_pages/{pageId}": {
+      "schema": { "$ref": "#/entities/SavedPage" },
+      "description": "Stores saved web pages and text search results for offline reading."
     }
   }
 }

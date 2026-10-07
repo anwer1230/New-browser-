@@ -171,6 +171,56 @@ export interface StoredCloudInfrastructure {
   updatedAt?: Timestamp;
 }
 
+export interface StoredSavedPage {
+  id: string;
+  ownerId?: string;
+  url: string;
+  title: string;
+  content: string;
+  translation: string;
+  savedAt: string;
+  createdAt?: Timestamp;
+}
+
+export async function savePageToFirestore(params: {
+  id: string;
+  url: string;
+  title: string;
+  content: string;
+  translation?: string;
+  savedAt: string;
+}) {
+  const user = auth.currentUser;
+  if (!user) return;
+  const pageId = sanitizeId(params.id);
+  const path = `saved_pages/${pageId}`;
+  try {
+    await setDoc(doc(db, 'saved_pages', pageId), {
+      ownerId: user.uid,
+      url: (params.url || 'https://www.google.com').slice(0, 1000),
+      title: (params.title || params.url || 'صفحة محفوظة').slice(0, 300),
+      content: (params.content || 'محتوى الصفحة المحفوظة').slice(0, 49000),
+      translation: (params.translation || '').slice(0, 49000),
+      savedAt: (params.savedAt || new Date().toISOString()).slice(0, 100),
+      createdAt: serverTimestamp(),
+    });
+  } catch (error) {
+    handleFirestoreError(error, OperationType.CREATE, path);
+  }
+}
+
+export async function deleteSavedPageFromFirestore(pageId: string) {
+  const user = auth.currentUser;
+  if (!user) return;
+  const pid = sanitizeId(pageId);
+  const path = `saved_pages/${pid}`;
+  try {
+    await deleteDoc(doc(db, 'saved_pages', pid));
+  } catch (error) {
+    handleFirestoreError(error, OperationType.DELETE, path);
+  }
+}
+
 export async function saveWatchHistoryToDb(params: {
   videoId: string;
   title: string;

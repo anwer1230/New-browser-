@@ -109,6 +109,18 @@ service cloud.firestore {
         && data.updatedAt is timestamp;
     }
 
+    function isValidSavedPage(data) {
+      return data.keys().hasAll(['ownerId', 'url', 'title', 'content', 'translation', 'savedAt', 'createdAt'])
+        && data.keys().hasOnly(['ownerId', 'url', 'title', 'content', 'translation', 'savedAt', 'createdAt'])
+        && data.ownerId is string && isValidId(data.ownerId) && data.ownerId == request.auth.uid
+        && data.url is string && data.url.size() >= 1 && data.url.size() <= 1000
+        && data.title is string && data.title.size() >= 1 && data.title.size() <= 300
+        && data.content is string && data.content.size() >= 1 && data.content.size() <= 50000
+        && data.translation is string && data.translation.size() <= 50000
+        && data.savedAt is string && data.savedAt.size() >= 1 && data.savedAt.size() <= 100
+        && data.createdAt is timestamp;
+    }
+
     // 1. Sessions Collection
     match /sessions/{sessionId} {
       allow get: if isSignedIn() && isValidId(sessionId) && existing().ownerId == request.auth.uid;
@@ -216,6 +228,18 @@ service cloud.firestore {
         && incoming().updatedAt == request.time
         && incoming().diff(existing()).affectedKeys().hasOnly(['instanceShape', 'instanceRegion', 'publicIp', 'vpnClientConf', 'vpnServerConf', 'sshPublicKey', 'groqEnabled', 'status', 'updatedAt']);
       allow delete: if isSignedIn() && isValidId(infraId) && infraId == request.auth.uid && existing().ownerId == request.auth.uid;
+    }
+
+    // 7. Saved Pages Collection (Offline Reading + Search Results Sync)
+    match /saved_pages/{pageId} {
+      allow get: if isSignedIn() && isValidId(pageId) && existing().ownerId == request.auth.uid;
+      allow list: if isSignedIn() && existing().ownerId == request.auth.uid;
+      allow create: if isSignedIn()
+        && isValidId(pageId)
+        && isValidSavedPage(incoming())
+        && incoming().createdAt == request.time;
+      allow update: if false;
+      allow delete: if isSignedIn() && isValidId(pageId) && existing().ownerId == request.auth.uid;
     }
   }
 }
