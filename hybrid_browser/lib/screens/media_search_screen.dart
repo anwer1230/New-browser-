@@ -1,6 +1,8 @@
 import 'package:flutter/material.dart';
 import '../services/media_api.dart';
+import '../services/download_manager.dart';
 import 'video_player_screen.dart';
+import 'downloads_screen.dart';
 
 class MediaSearchScreen extends StatefulWidget {
   final String? initialQuery;
@@ -181,6 +183,22 @@ class _MediaSearchScreenState extends State<MediaSearchScreen> {
                       onSelected: (choice) {
                         if (choice == 'stream') _playDirect(v);
                         if (choice == 'translate') _downloadAndTranslate(v);
+                        if (choice == 'download') {
+                          DownloadManager.instance.startDownload(
+                            id: (v['id'] ?? DateTime.now().millisecondsSinceEpoch).toString(),
+                            title: (v['title'] ?? 'فيديو').toString(),
+                            url: (v['url'] ?? '').toString(),
+                            thumbnail: (v['thumbnail'] ?? '').toString(),
+                            quality: '720p',
+                            withArabicSubtitles: true,
+                          );
+                          Navigator.push(
+                            context,
+                            MaterialPageRoute(
+                              builder: (_) => const DownloadsScreen(),
+                            ),
+                          );
+                        }
                       },
                       itemBuilder: (_) => const [
                         PopupMenuItem(
@@ -190,6 +208,10 @@ class _MediaSearchScreenState extends State<MediaSearchScreen> {
                         PopupMenuItem(
                           value: 'translate',
                           child: Text('🌐 ترجمة عربية بالـ AI + مشاهدة'),
+                        ),
+                        PopupMenuItem(
+                          value: 'download',
+                          child: Text('📥 تنزيل مع تقدم حي + ملف SRT'),
                         ),
                       ],
                     ),
