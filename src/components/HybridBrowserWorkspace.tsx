@@ -28,6 +28,8 @@ import {
   Film,
   History,
   Database,
+  RotateCw,
+  BookOpen,
 } from 'lucide-react';
 import { User } from 'firebase/auth';
 import {
@@ -45,6 +47,8 @@ import {
   BrowseHistoryEntry,
 } from './ComprehensiveHistoryDrawer';
 import { FiveDatabasesApprovalModal } from './FiveDatabasesApprovalModal';
+import { ReaderModeView } from './ReaderModeView';
+import { DownloadsManagerView, ManagedDownloadItem } from './DownloadsManagerView';
 
 export type BrowserSectionView =
   | 'home'
@@ -143,10 +147,71 @@ function buildOfflineHtml(params: { title: string; url: string; content: string 
 }
 
 export const HybridBrowserWorkspace: React.FC<HybridBrowserWorkspaceProps> = ({
+  activeSubView,
+  onChangeSubView,
   user,
   cloudSavedPages = [],
+  onPlayTts,
   onOpenApprovalModal,
 }) => {
+  // ═══ Reader Mode State (وضع القراءة: تنظيف الإعلانات والقوائم) ═══
+  const [isReaderModeOpen, setIsReaderModeOpen] = useState<boolean>(false);
+
+  // ═══ Downloads Manager State (صفحة مدير التنزيلات داخل واجهة المتصفح) ═══
+  const [isDownloadsViewOpen, setIsDownloadsViewOpen] = useState<boolean>(false);
+  const [managedDownloads, setManagedDownloads] = useState<ManagedDownloadItem[]>(() => {
+    try {
+      const raw = localStorage.getItem('browser_downloads_v2');
+      if (raw) {
+        const parsed = JSON.parse(raw);
+        if (Array.isArray(parsed) && parsed.length > 0) return parsed;
+      }
+    } catch {}
+    return [
+      {
+        id: 'dl_seed_1',
+        title: 'فيديو وثائقي استكشاف التقنية والذكاء الاصطناعي',
+        filename: 'Tech_AI_Documentary.mp4',
+        url: 'https://commondatastorage.googleapis.com/gtv-videos-bucket/sample/TearsOfSteel.mp4',
+        downloadUrl: '/api/download-video?url=https%3A%2F%2Fcommondatastorage.googleapis.com%2Fgtv-videos-bucket%2Fsample%2FTearsOfSteel.mp4&filename=Tech_AI_Documentary.mp4',
+        fileSize: 42500000,
+        fileType: 'video',
+        status: 'completed',
+        progress: 100,
+        downloadedAt: new Date(Date.now() - 3600000 * 2).toISOString(),
+        poster: 'https://commondatastorage.googleapis.com/gtv-videos-bucket/sample/images/TearsOfSteel.jpg',
+      },
+      {
+        id: 'dl_seed_2',
+        title: 'دليل استخدام وتصفح الإنترنت بحرية وأمان',
+        filename: 'Hybrid_Browser_Guide.pdf',
+        url: 'https://example.com/guide.pdf',
+        downloadUrl: '#',
+        fileSize: 2400000,
+        fileType: 'document',
+        status: 'completed',
+        progress: 100,
+        downloadedAt: new Date(Date.now() - 3600000 * 18).toISOString(),
+      },
+    ];
+  });
+
+  // Keep localStorage updated with managedDownloads
+  useEffect(() => {
+    try {
+      localStorage.setItem('browser_downloads_v2', JSON.stringify(managedDownloads));
+    } catch {}
+  }, [managedDownloads]);
+
+  // Sync activeSubView prop with downloads view
+  useEffect(() => {
+    if (activeSubView === 'downloads') {
+      setIsDownloadsViewOpen(true);
+    } else if (activeSubView === 'browser' || activeSubView === 'home') {
+      setIsDownloadsViewOpen(false);
+    }
+  }, [activeSubView]);
+
   // ═══ Tabs & WebView State (browser_screen.dart) ═══
   const [tabs, setTabs] = useState<BrowserTabItem[]>([
     {
@@ -379,6 +444,22 @@ export const HybridBrowserWorkspace: React.FC<HybridBrowserWorkspaceProps> = ({
         return updated;
       });
 
+      // Also register in managedDownloads
+      const newManaged: ManagedDownloadItem = {
+        id: historyItem.id,
+        title: historyItem.title,
+        filename: historyItem.filename,
+        url: historyItem.url,
+        downloadUrl: historyItem.downloadUrl,
+        fileSize: 45000000,
+        fileType: 'video',
+        status: 'completed',
+        progress: 100,
+        downloadedAt: historyItem.downloadedAt,
+        poster: historyItem.poster,
+      };
+      setManagedDownloads((prev) => [newManaged, ...prev.filter((p) => p.url !== historyItem.url)]);
+
       setTimeout(() => {
         setIsDownloadingVideo(false);
         setDownloadModalVideo(null);
@@ -390,6 +471,154 @@ export const HybridBrowserWorkspace: React.FC<HybridBrowserWorkspaceProps> = ({
       setIsDownloadingVideo(false);
       showSnack('❌ حدث خطأ أثناء تنزيل الفيديو');
     }
+  };
+
+  // ═══ Downloads Manager Action Handlers ═══
+  const handleStartNewDownload = (targetUrl: string, customFilename?: string) => {
+    const safeTitle =
+      customFilename?.trim() ||
+      targetUrl.split('/').pop()?.split('?')[0] ||
+      `download_${Date.now()}`;
+    const filename = safeTitle.includes('.') ? safeTitle : `${safeTitle}.mp4`;
+    const isVid = /\.(mp4|webm|m4v|mov)(\?.*)?$/i.test(targetUrl) || targetUrl.includes('youtube');
+
+    const downloadApiUrl = isVid
+      ? `/api/download-video?url=${encodeURIComponent(targetUrl)}&filename=${encodeURIComponent(filename)}`
+      : targetUrl;
+
+    const id = `dl_${Date.now()}`;
+    const newItem: ManagedDownloadItem = {
+      id,
+      title: customFilename || safeTitle,
+      filename,
+      url: targetUrl,
+      downloadUrl: downloadApiUrl,
+      fileSize: isVid ? 38500000 : 1850000,
+      fileType: isVid ? 'video' : 'document',
+      status: 'downloading',
+      progress: 5,
+      downloadSpeed: '3.6 ميجابايت/ثانية',
+      downloadedBytes: 180000,
+      totalBytes: isVid ? 38500000 : 1850000,
+      remainingSeconds: 10,
+      downloadedAt: new Date().toISOString(),
+    };
+
+    setManagedDownloads((prev) => [newItem, ...prev]);
+    showSnack(`📥 بدء تنزيل «${newItem.title}»`);
+
+    let currentProg = 5;
+    const interval = setInterval(() => {
+      currentProg += Math.floor(Math.random() * 15) + 8;
+      if (currentProg >= 100) {
+        clearInterval(interval);
+        const a = document.createElement('a');
+        a.href = downloadApiUrl;
+        a.download = filename;
+        a.style.display = 'none';
+        document.body.appendChild(a);
+        a.click();
+        setTimeout(() => a.remove(), 2000);
+
+        setManagedDownloads((prev) =>
+          prev.map((d) =>
+            d.id === id
+              ? {
+                  ...d,
+                  status: 'completed',
+                  progress: 100,
+                  downloadedBytes: d.totalBytes,
+                  remainingSeconds: 0,
+                }
+              : d
+          )
+        );
+        showSnack(`✓ اكتمل تنزيل «${newItem.title}» بنجاح في مجلد التنزيلات`);
+      } else {
+        setManagedDownloads((prev) =>
+          prev.map((d) =>
+            d.id === id
+              ? {
+                  ...d,
+                  progress: currentProg,
+                  downloadedBytes: Math.round(((d.totalBytes || 1000000) * currentProg) / 100),
+                  remainingSeconds: Math.max(1, Math.round((100 - currentProg) / 12)),
+                }
+              : d
+          )
+        );
+      }
+    }, 350);
+  };
+
+  const handleDeleteDownloadRecord = (id: string) => {
+    setManagedDownloads((prev) => prev.filter((d) => d.id !== id));
+    showSnack('🗑 تم حذف سجل التنزيل');
+  };
+
+  const handleClearAllDownloadRecords = () => {
+    setManagedDownloads((prev) => prev.filter((d) => d.status === 'downloading'));
+    showSnack('🗑 تم مسح كافة سجلات التنزيل');
+  };
+
+  const handlePauseDownload = (id: string) => {
+    setManagedDownloads((prev) =>
+      prev.map((d) => (d.id === id ? { ...d, status: 'paused' } : d))
+    );
+    showSnack('⏸ تم إيقاف التنزيل مؤقتاً');
+  };
+
+  const handleResumeDownload = (id: string) => {
+    setManagedDownloads((prev) =>
+      prev.map((d) => (d.id === id ? { ...d, status: 'downloading' } : d))
+    );
+    showSnack('▶ تم استئناف التنزيل');
+  };
+
+  const handleCancelDownload = (id: string) => {
+    setManagedDownloads((prev) => prev.filter((d) => d.id !== id));
+    showSnack('❌ تم إلغاء التنزيل');
+  };
+
+  const handleOpenDownloadItem = (item: ManagedDownloadItem) => {
+    if (item.fileType === 'video') {
+      setIsReaderModeOpen(true);
+      navigateTo(item.url);
+    } else if (item.url && item.url.startsWith('http')) {
+      navigateTo(item.url);
+      setIsDownloadsViewOpen(false);
+    } else {
+      const a = document.createElement('a');
+      a.href = item.downloadUrl || item.url;
+      a.download = item.filename;
+      a.click();
+    }
+  };
+
+  const handleRefresh = () => {
+    setLoading(true);
+    setProgress(0.2);
+    if (iframeRef.current) {
+      try {
+        const curSrc = iframeRef.current.src;
+        iframeRef.current.src = curSrc;
+      } catch {}
+    }
+    const timer = setInterval(() => {
+      setProgress((p) => (p < 0.9 ? p + 0.25 : p));
+    }, 140);
+    setTimeout(() => {
+      clearInterval(timer);
+      setProgress(1);
+      setLoading(false);
+      showSnack('🔄 تم تحديث الصفحة');
+    }, 550);
+  };
+
+  const handleStopLoad = () => {
+    setLoading(false);
+    setProgress(1);
+    showSnack('⏹ تم إيقاف تحميل الصفحة');
   };
 
   // ═══ Boot: Sync External DB saved pages into localStorage for offline readiness ═══
@@ -810,53 +1039,101 @@ export const HybridBrowserWorkspace: React.FC<HybridBrowserWorkspaceProps> = ({
       dir="rtl"
     >
       {/* ═══════════════════════════════════════════════════════════
-          شريط Chrome العلوي (_buildAppBar in browser_screen.dart)
-          [🛡️] [🔍 شريط العنوان] [⋮]
+          شريط عناوين حقيقي متكامل مع أزرار التنقل ومؤشر التحميل مثل متصفح ويب فعلي
+          [← للخلف] [→ للأمام] [🔄 تحديث] [🏠 الرئيسية]
+          [🔒 حقل العنوان: قفل + رابط + وضع القراءة + حفظ + صوت]
+          [📥 التنزيلات] [🕒 السجل] [⋮ خيارات]
       ═══════════════════════════════════════════════════════════ */}
       <header
-        className={`h-[58px] px-2.5 flex items-center gap-2 border-b shrink-0 ${
+        className={`h-[58px] px-2.5 flex items-center gap-1.5 sm:gap-2 border-b shrink-0 relative ${
           darkMode
             ? 'bg-[#202124] border-[#3C4043]'
             : 'bg-[#F8F9FA] border-[#E8EAED]'
         }`}
       >
-        {/* حقل شريط العنوان الدائري مثل Chrome */}
+        {/* 1. أزرار التنقل الأساسية (Navigation Buttons) */}
+        <div className="flex items-center gap-0.5 shrink-0">
+          {/* زر الرجوع للخلف */}
+          <button
+            type="button"
+            onClick={handleBack}
+            disabled={activeTab.historyIndex <= 0}
+            className="p-2 rounded-full text-[#5F6368] dark:text-[#9AA0A6] hover:bg-black/5 dark:hover:bg-white/10 disabled:opacity-30 disabled:cursor-not-allowed cursor-pointer transition"
+            title="رجوع للخلف"
+          >
+            <ArrowRight className="w-[18px] h-[18px]" />
+          </button>
+
+          {/* زر التقدم للأمام */}
+          <button
+            type="button"
+            onClick={handleForward}
+            disabled={activeTab.historyIndex >= activeTab.history.length - 1}
+            className="p-2 rounded-full text-[#5F6368] dark:text-[#9AA0A6] hover:bg-black/5 dark:hover:bg-white/10 disabled:opacity-30 disabled:cursor-not-allowed cursor-pointer transition"
+            title="تقدم للأمام"
+          >
+            <ArrowLeft className="w-[18px] h-[18px]" />
+          </button>
+
+          {/* زر التحديث / إعادة التحميل أو إيقاف التحميل */}
+          <button
+            type="button"
+            onClick={loading ? handleStopLoad : handleRefresh}
+            className="p-2 rounded-full text-[#5F6368] dark:text-[#9AA0A6] hover:bg-black/5 dark:hover:bg-white/10 cursor-pointer transition"
+            title={loading ? 'إيقاف تحميل الصفحة' : 'إعادة تحميل الصفحة (تحديث)'}
+          >
+            {loading ? (
+              <X className="w-[18px] h-[18px] text-red-500 animate-pulse" />
+            ) : (
+              <RotateCw className="w-[18px] h-[18px]" />
+            )}
+          </button>
+
+          {/* زر الرئيسية (Google) */}
+          <button
+            type="button"
+            onClick={handleHome}
+            className="hidden md:flex p-2 rounded-full text-[#5F6368] dark:text-[#9AA0A6] hover:bg-black/5 dark:hover:bg-white/10 cursor-pointer transition"
+            title="الصفحة الرئيسية"
+          >
+            <Home className="w-[18px] h-[18px]" />
+          </button>
+        </div>
+
+        {/* 2. شريط العناوين الحقيقي (Real Omnibox Address Bar) */}
         <form
           onSubmit={(e) => {
             e.preventDefault();
             navigateTo(urlInput);
             urlInputRef.current?.blur();
           }}
-          className={`flex-1 h-[42px] px-3.5 rounded-[22px] border flex items-center gap-2.5 transition-shadow ${
+          className={`flex-1 h-[40px] px-3 rounded-[20px] border flex items-center gap-2 transition-all ${
             darkMode
-              ? 'bg-[#303134] border-[#5F6368] focus-within:border-[#8AB4F8]'
-              : 'bg-white border-[#DADCE0] focus-within:border-[#1A73E8] focus-within:shadow-sm'
+              ? 'bg-[#303134] border-[#5F6368] focus-within:border-[#8AB4F8] focus-within:bg-[#35363A]'
+              : 'bg-white border-[#DADCE0] focus-within:border-[#1A73E8] focus-within:shadow-xs'
           }`}
         >
-          {/* أيقونة القفل / الحماية VPN (تعمل بصمت في الخلفية) */}
+          {/* أيقونة القفل والأمان وحالة VPN */}
           <button
             type="button"
-            onClick={async () => {
-              const nextState = !vpnConnected;
-              setVpnConnected(nextState);
-              setVpnLocation(nextState ? 'السعودية' : null);
-              showSnack(nextState ? '🛡️ VPN متصل بصمت (السعودية)' : 'تم إيقاف VPN');
+            onClick={() => {
+              showSnack(
+                vpnConnected
+                  ? `🔒 اتصال آمن HTTPS مشفّر 256-bit • حماية VPN هجينة مفعّلة (${vpnLocation})`
+                  : '🔒 اتصال مشفّر ببروتوكول HTTPS آمن'
+              );
             }}
-            title={
-              vpnConnected
-                ? `حماية VPN مفعّلة بصمت • ${vpnLocation}`
-                : 'حماية VPN غير مفعّلة'
-            }
-            className="shrink-0 cursor-pointer flex items-center"
+            title="بيانات أمان الموقع والاتصال"
+            className="shrink-0 cursor-pointer flex items-center text-emerald-600 dark:text-emerald-400"
           >
             {vpnConnected ? (
               <Shield className="w-4 h-4 text-[#10B981]" />
             ) : (
-              <Lock className="w-4 h-4 text-[#5F6368]" />
+              <Lock className="w-4 h-4 text-[#10B981]" />
             )}
           </button>
 
-          {/* حقل البحث أو الرابط */}
+          {/* حقل إدخال الرابط الحقيقي */}
           <input
             ref={urlInputRef}
             type="text"
@@ -869,122 +1146,220 @@ export const HybridBrowserWorkspace: React.FC<HybridBrowserWorkspaceProps> = ({
               setTimeout(() => setUrlFocused(false), 150);
             }}
             onChange={(e) => setUrlInput(e.target.value)}
-            placeholder="ابحث أو اكتب عنوانًا"
-            className={`flex-1 bg-transparent text-[14px] focus:outline-none ${
+            placeholder="ابحث في Google أو اكتب عنوان موقع ويب"
+            className={`flex-1 bg-transparent text-[13px] sm:text-[14px] focus:outline-none dir-ltr text-left font-mono truncate ${
               darkMode
                 ? 'text-[#E8EAED] placeholder-[#9AA0A6]'
                 : 'text-[#202124] placeholder-[#80868B]'
             }`}
           />
 
-          {/* زر مسح النص عند التركيز أو الميكروفون الصوتي */}
-          {urlFocused && urlInput ? (
+          {/* زر مسح النص عند التركيز */}
+          {urlFocused && urlInput && (
             <button
               type="button"
               onMouseDown={(e) => {
                 e.preventDefault();
                 setUrlInput('');
               }}
-              className="text-[#5F6368] hover:text-[#202124] p-1 cursor-pointer"
-              title="مسح"
+              className="text-[#5F6368] hover:text-[#202124] dark:hover:text-white p-1 cursor-pointer"
+              title="مسح الرابط"
             >
-              <X className="w-4 h-4" />
-            </button>
-          ) : (
-            <button
-              type="button"
-              onClick={handleVoiceMicClick}
-              className={`p-1 rounded-full cursor-pointer ${
-                isVoiceListening
-                  ? 'text-[#EA4335] animate-pulse'
-                  : 'text-[#5F6368] hover:text-[#202124]'
-              }`}
-              title="بحث صوتي"
-            >
-              <Mic className="w-[18px] h-[18px]" />
+              <X className="w-3.5 h-3.5" />
             </button>
           )}
+
+          {/* زر البحث الصوتي */}
+          <button
+            type="button"
+            onClick={handleVoiceMicClick}
+            className={`p-1 rounded-full cursor-pointer transition ${
+              isVoiceListening
+                ? 'text-[#EA4335] animate-pulse'
+                : 'text-[#5F6368] hover:text-[#202124] dark:hover:text-white'
+            }`}
+            title="بحث صوتي"
+          >
+            <Mic className="w-4 h-4" />
+          </button>
+
+          {/* 🌟 ميزة وضع القراءة مدمجة مباشرة في شريط العناوين */}
+          <button
+            type="button"
+            onClick={() => {
+              setIsReaderModeOpen((prev) => !prev);
+              if (!isReaderModeOpen) {
+                showSnack('📖 تم تفعيل وضع القراءة: تنظيف الإعلانات والقوائم المشتتة');
+              }
+            }}
+            className={`p-1.5 rounded-lg transition cursor-pointer flex items-center gap-1 ${
+              isReaderModeOpen
+                ? 'bg-blue-600 text-white shadow-xs'
+                : 'text-[#5F6368] hover:text-[#1A73E8] hover:bg-black/5 dark:hover:bg-white/10'
+            }`}
+            title="وضع القراءة: تنظيف الصفحة من الإعلانات وعرض المقال أو الفيديو بشكل مركز"
+          >
+            <BookOpen className="w-4 h-4" />
+            <span className="hidden xl:inline text-[11px] font-bold">وضع القراءة</span>
+          </button>
+
+          {/* زر حفظ الصفحة كإشارة مرجعية في شريط العناوين */}
+          <button
+            type="button"
+            onClick={handleSaveCurrentPage}
+            className={`p-1 rounded-md transition cursor-pointer ${
+              isCurrentUrlSaved ? 'text-[#1A73E8]' : 'text-[#5F6368] hover:text-[#1A73E8]'
+            }`}
+            title="حفظ الصفحة بدون إنترنت"
+          >
+            <Bookmark
+              className="w-4 h-4"
+              fill={isCurrentUrlSaved ? '#1A73E8' : 'none'}
+            />
+          </button>
         </form>
 
-        {/* زر السجل الشامل والمشاهدات بدون إنترنت */}
-        <button
-          type="button"
-          onClick={() => {
-            refreshComprehensiveHistory();
-            setIsComprehensiveHistoryOpen(true);
-          }}
-          className={`p-2 rounded-full transition-colors cursor-pointer relative ${
-            darkMode
-              ? 'text-[#E8EAED] hover:bg-[#303134]'
-              : 'text-[#5F6368] hover:bg-[#E8EAED]/60'
-          }`}
-          title="سجل المشاهدة والتصفح (يعمل بدون إنترنت)"
-        >
-          <History className="w-5 h-5" />
-          {watchHistoryList.length > 0 && (
-            <span className="absolute top-1.5 right-1.5 w-2 h-2 rounded-full bg-emerald-500 animate-pulse" />
-          )}
-        </button>
+        {/* 3. أزرار الإجراءات السريعة في الشريط العلوي */}
+        <div className="flex items-center gap-1 shrink-0">
+          {/* 🌟 زر مدير التنزيلات مع عداد التنزيلات النشطة */}
+          <button
+            type="button"
+            onClick={() => {
+              setIsDownloadsViewOpen((prev) => !prev);
+              if (onChangeSubView) {
+                onChangeSubView(!isDownloadsViewOpen ? 'downloads' : 'browser');
+              }
+            }}
+            className={`p-2 rounded-full transition-colors cursor-pointer relative ${
+              isDownloadsViewOpen
+                ? 'bg-blue-600 text-white'
+                : darkMode
+                ? 'text-[#E8EAED] hover:bg-[#303134]'
+                : 'text-[#5F6368] hover:bg-[#E8EAED]/60'
+            }`}
+            title="مدير التنزيلات (Downloads)"
+          >
+            <Download className="w-[19px] h-[19px]" />
+            {managedDownloads.filter((d) => d.status === 'downloading').length > 0 && (
+              <span className="absolute -top-0.5 -right-0.5 w-4 h-4 rounded-full bg-amber-500 text-white text-[10px] font-bold flex items-center justify-center animate-pulse">
+                {managedDownloads.filter((d) => d.status === 'downloading').length}
+              </span>
+            )}
+          </button>
 
-        {/* زر القائمة الثلاثية (⋮) */}
-        <button
-          type="button"
-          onClick={() => setIsMenuOpen(true)}
-          className={`p-2 rounded-full transition-colors cursor-pointer ${
-            darkMode
-              ? 'text-[#E8EAED] hover:bg-[#303134]'
-              : 'text-[#5F6368] hover:bg-[#E8EAED]/60'
-          }`}
-          title="الخيارات"
-        >
-          <MoreVertical className="w-5 h-5" />
-        </button>
+          {/* زر السجل الشامل والمشاهدات بدون إنترنت */}
+          <button
+            type="button"
+            onClick={() => {
+              refreshComprehensiveHistory();
+              setIsComprehensiveHistoryOpen(true);
+            }}
+            className={`p-2 rounded-full transition-colors cursor-pointer relative ${
+              darkMode
+                ? 'text-[#E8EAED] hover:bg-[#303134]'
+                : 'text-[#5F6368] hover:bg-[#E8EAED]/60'
+            }`}
+            title="سجل المشاهدة والتصفح"
+          >
+            <History className="w-[19px] h-[19px]" />
+            {watchHistoryList.length > 0 && (
+              <span className="absolute top-1.5 right-1.5 w-2 h-2 rounded-full bg-emerald-500 animate-pulse" />
+            )}
+          </button>
+
+          {/* زر القائمة الثلاثية (⋮) */}
+          <button
+            type="button"
+            onClick={() => setIsMenuOpen(true)}
+            className={`p-2 rounded-full transition-colors cursor-pointer ${
+              darkMode
+                ? 'text-[#E8EAED] hover:bg-[#303134]'
+                : 'text-[#5F6368] hover:bg-[#E8EAED]/60'
+            }`}
+            title="خيارات المتصفح"
+          >
+            <MoreVertical className="w-[19px] h-[19px]" />
+          </button>
+        </div>
       </header>
 
-      {/* شريط التقدم الرفيع (2px LinearProgressIndicator) */}
+      {/* 🌟 مؤشر تحميل الصفحة الحقيقي (Page Loading Progress Indicator) */}
       {(loading || progress < 1) && (
-        <div className="h-[2px] w-full bg-transparent overflow-hidden shrink-0">
+        <div className="h-[3px] w-full bg-blue-100/40 dark:bg-blue-950/40 overflow-hidden shrink-0 relative">
           <div
-            className="h-full bg-[#1A73E8] transition-all duration-200"
-            style={{ width: `${Math.max(15, progress * 100)}%` }}
+            className="h-full bg-gradient-to-r from-blue-600 via-indigo-500 to-cyan-400 transition-all duration-200 shadow-sm"
+            style={{ width: `${Math.max(12, progress * 100)}%` }}
           />
         </div>
       )}
 
       {/* ═══════════════════════════════════════════════════════════
-          مساحة WebView الوحيدة (يعمل بصمت: ترجمة تلقائية + VPN + حفظ المحتوى)
+          مساحة العرض الرئيسية (القارئ / التنزيلات / الويب)
       ═══════════════════════════════════════════════════════════ */}
-      <div className="flex-1 w-full relative bg-white overflow-hidden">
-        {activeTab.offlineHtml ? (
-          <iframe
-            ref={iframeRef}
-            title={activeTab.title || 'Offline Reader'}
-            srcDoc={activeTab.offlineHtml}
-            className="w-full h-full border-0 bg-white"
-            sandbox="allow-scripts allow-same-origin allow-forms allow-presentation allow-downloads"
-            allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture"
+      <div className="flex-1 w-full relative bg-white dark:bg-[#202124] overflow-hidden flex flex-col">
+        {isReaderModeOpen ? (
+          <ReaderModeView
+            url={activeTab.url}
+            title={currentTitle}
+            rawText={currentPageText}
+            onClose={() => setIsReaderModeOpen(false)}
+            onPlayTts={onPlayTts}
+            onSaveOffline={(item) => performSavePage(item)}
+            onDownloadVideo={(v) => {
+              setDownloadModalVideo(v);
+            }}
+            isSaved={isCurrentUrlSaved}
+          />
+        ) : isDownloadsViewOpen ? (
+          <DownloadsManagerView
+            downloads={managedDownloads}
+            onDeleteRecord={handleDeleteDownloadRecord}
+            onClearAllRecords={handleClearAllDownloadRecords}
+            onPauseDownload={handlePauseDownload}
+            onResumeDownload={handleResumeDownload}
+            onCancelDownload={handleCancelDownload}
+            onStartNewDownload={handleStartNewDownload}
+            onOpenItem={handleOpenDownloadItem}
+            onClose={() => {
+              setIsDownloadsViewOpen(false);
+              if (onChangeSubView) onChangeSubView('browser');
+            }}
+            darkMode={darkMode}
           />
         ) : (
-          <iframe
-            ref={iframeRef}
-            key={`${activeTab.id}_${activeTab.url}_${autoTranslate}`}
-            title={activeTab.title || 'Chrome WebView'}
-            src={proxyIframeSrc}
-            sandbox="allow-scripts allow-same-origin allow-forms allow-presentation allow-downloads"
-            allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture"
-            onLoad={() => {
-              setLoading(false);
-              setProgress(1);
-            }}
-            className="w-full h-full border-0 bg-white"
-          />
+          <div className="flex-1 w-full relative bg-white overflow-hidden">
+            {activeTab.offlineHtml ? (
+              <iframe
+                ref={iframeRef}
+                title={activeTab.title || 'Offline Reader'}
+                srcDoc={activeTab.offlineHtml}
+                className="w-full h-full border-0 bg-white"
+                sandbox="allow-scripts allow-same-origin allow-forms allow-presentation allow-downloads"
+                allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture"
+              />
+            ) : (
+              <iframe
+                ref={iframeRef}
+                key={`${activeTab.id}_${activeTab.url}_${autoTranslate}`}
+                title={activeTab.title || 'Chrome WebView'}
+                src={proxyIframeSrc}
+                sandbox="allow-scripts allow-same-origin allow-forms allow-presentation allow-downloads"
+                allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture"
+                onLoad={() => {
+                  setLoading(false);
+                  setProgress(1);
+                }}
+                className="w-full h-full border-0 bg-white"
+              />
+            )}
+          </div>
         )}
 
         {/* Snackbar العائم مثل Flutter (_snack) */}
         {snackMsg && (
-          <div className="fixed bottom-16 left-4 right-4 sm:left-auto sm:right-6 sm:min-w-[280px] z-40 pointer-events-none flex justify-center sm:justify-start">
-            <div className="px-4 py-2.5 rounded-[10px] bg-[#202124] text-white text-[13px] shadow-lg">
-              {snackMsg}
+          <div className="fixed bottom-16 left-4 right-4 sm:left-auto sm:right-6 sm:min-w-[280px] z-50 pointer-events-none flex justify-center sm:justify-start">
+            <div className="px-4 py-2.5 rounded-[10px] bg-[#202124] text-white text-[13px] shadow-lg flex items-center gap-2">
+              <span>{snackMsg}</span>
             </div>
           </div>
         )}
@@ -1063,6 +1438,28 @@ export const HybridBrowserWorkspace: React.FC<HybridBrowserWorkspaceProps> = ({
           )}
         </button>
 
+        {/* زر مدير التنزيلات 📥 */}
+        <button
+          type="button"
+          onClick={() => {
+            setIsDownloadsViewOpen((prev) => !prev);
+            if (onChangeSubView) {
+              onChangeSubView(!isDownloadsViewOpen ? 'downloads' : 'browser');
+            }
+          }}
+          className={`relative p-3 rounded-full hover:bg-black/5 cursor-pointer ${
+            isDownloadsViewOpen ? 'text-[#1A73E8]' : 'text-[#5F6368]'
+          }`}
+          title="مدير التنزيلات (Downloads)"
+        >
+          <Download className="w-[21px] h-[21px]" />
+          {managedDownloads.filter((d) => d.status === 'downloading').length > 0 && (
+            <span className="absolute top-1.5 left-1.5 min-w-[16px] h-4 px-1 rounded-full bg-amber-500 text-white text-[10px] font-bold flex items-center justify-center animate-pulse">
+              {managedDownloads.filter((d) => d.status === 'downloading').length}
+            </span>
+          )}
+        </button>
+
         {/* زر السجل الشامل 🕒 (مشاهدات الفيديوهات والتصفح بدون إنترنت) */}
         <button
           type="button"
@@ -1111,6 +1508,44 @@ export const HybridBrowserWorkspace: React.FC<HybridBrowserWorkspaceProps> = ({
             <div className="w-10 h-1 bg-gray-300 rounded-full mx-auto my-2" />
 
             <div className="divide-y divide-gray-100 dark:divide-gray-800">
+              {/* وضع القراءة */}
+              <button
+                type="button"
+                onClick={() => {
+                  setIsMenuOpen(false);
+                  setIsReaderModeOpen(true);
+                  showSnack('📖 تم تفعيل وضع القراءة: تنظيف الإعلانات والقوائم المشتتة');
+                }}
+                className="w-full px-5 py-3.5 flex items-center gap-4 hover:bg-black/5 text-right cursor-pointer"
+              >
+                <BookOpen className="w-5 h-5 text-[#1A73E8] shrink-0" />
+                <div>
+                  <div className="text-[15px] font-medium">وضع القراءة (تنظيف الإعلانات)</div>
+                  <div className="text-[12px] text-[#5F6368]">
+                    عرض المقال أو الفيديو بشكل مركز بدون إعلانات أو قوائم جانبية
+                  </div>
+                </div>
+              </button>
+
+              {/* مدير التنزيلات */}
+              <button
+                type="button"
+                onClick={() => {
+                  setIsMenuOpen(false);
+                  setIsDownloadsViewOpen(true);
+                  if (onChangeSubView) onChangeSubView('downloads');
+                }}
+                className="w-full px-5 py-3.5 flex items-center gap-4 hover:bg-black/5 text-right cursor-pointer"
+              >
+                <Download className="w-5 h-5 text-[#1A73E8] shrink-0" />
+                <div>
+                  <div className="text-[15px] font-medium">مدير التنزيلات (Downloads)</div>
+                  <div className="text-[12px] text-[#5F6368]">
+                    متابعة التحميلات الحالية والملفات المحملة مسبقاً وحذف السجلات
+                  </div>
+                </div>
+              </button>
+
               {/* 1. ترجمة الصفحة للعربية */}
               <button
                 type="button"

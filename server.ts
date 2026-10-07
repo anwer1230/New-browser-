@@ -1739,6 +1739,172 @@ ${rawText.slice(0, 12000)}`;
     res.json({ ok: true });
   });
 
+  // POST /api/reader-content — Extract clean, distraction-free article or video content for Reader Mode
+  app.post('/api/reader-content', async (req: Request, res: Response) => {
+    try {
+      const { url = '', textFallback = '', titleFallback = '' } = req.body || {};
+      const targetUrl = String(url).trim();
+      if (!targetUrl) {
+        res.status(400).json({ error: 'URL is required' });
+        return;
+      }
+
+      let isVideo = false;
+      let videoEmbedUrl = '';
+      let videoDirectUrl = '';
+      let videoId = '';
+
+      const ytMatch = targetUrl.match(/(?:youtube\.com\/(?:watch\?v=|embed\/|shorts\/)|youtu\.be\/)([a-zA-Z0-9_-]{11})/);
+      if (ytMatch) {
+        isVideo = true;
+        videoId = ytMatch[1];
+        videoEmbedUrl = `https://www.youtube-nocookie.com/embed/${videoId}?autoplay=1&rel=0`;
+        videoDirectUrl = targetUrl;
+      } else if (/\.(mp4|webm|m4v|ogg)(\?.*)?$/i.test(targetUrl)) {
+        isVideo = true;
+        videoDirectUrl = targetUrl;
+      }
+
+      let parsedTitle = String(titleFallback || '').trim();
+      let author = '';
+      let siteName = '';
+      let publishedDate = '';
+      let heroImage = '';
+      let paragraphs: string[] = [];
+      let textContent = String(textFallback || '').trim();
+
+      try {
+        const u = new URL(targetUrl);
+        siteName = u.hostname.replace(/^www\./, '');
+      } catch {}
+
+      if (targetUrl.startsWith('http://') || targetUrl.startsWith('https://')) {
+        try {
+          const controller = new AbortController();
+          const timeout = setTimeout(() => controller.abort(), 6000);
+          const response = await fetch(targetUrl, {
+            headers: {
+              'User-Agent':
+                'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36',
+              Accept: 'text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8',
+            },
+            signal: controller.signal,
+          });
+          clearTimeout(timeout);
+
+          if (response.ok) {
+            const html = await response.text();
+
+            const ogTitleMatch = html.match(/<meta[^>]+property=["']og:title["'][^>]+content=["']([^"']+)["']/i);
+            const titleTagMatch = html.match(/<title[^>]*>([\s\S]*?)<\/title>/i);
+            const h1Match = html.match(/<h1[^>]*>([\s\S]*?)<\/h1>/i);
+
+            if (ogTitleMatch && ogTitleMatch[1]) {
+              parsedTitle = ogTitleMatch[1].trim();
+            } else if (titleTagMatch && titleTagMatch[1]) {
+              parsedTitle = titleTagMatch[1].replace(/<[^>]+>/g, '').trim();
+            } else if (h1Match && h1Match[1]) {
+              parsedTitle = h1Match[1].replace(/<[^>]+>/g, '').trim();
+            }
+
+            const authorMatch =
+              html.match(/<meta[^>]+name=["']author["'][^>]+content=["']([^"']+)["']/i) ||
+              html.match(/<meta[^>]+property=["']article:author["'][^>]+content=["']([^"']+)["']/i);
+            if (authorMatch && authorMatch[1]) {
+              author = authorMatch[1].trim();
+            }
+
+            const ogSiteMatch = html.match(/<meta[^>]+property=["']og:site_name["'][^>]+content=["']([^"']+)["']/i);
+            if (ogSiteMatch && ogSiteMatch[1]) {
+              siteName = ogSiteMatch[1].trim();
+            }
+
+            const ogImageMatch = html.match(/<meta[^>]+property=["']og:image["'][^>]+content=["']([^"']+)["']/i);
+            if (ogImageMatch && ogImageMatch[1]) {
+              heroImage = ogImageMatch[1].trim();
+            }
+
+            const cleanedHtml = html
+              .replace(/<script\b[^<]*(?:(?!<\/script>)<[^<]*)*<\/script>/gi, '')
+              .replace(/<style\b[^<]*(?:(?!<\/style>)<[^<]*)*<\/style>/gi, '')
+              .replace(/<nav\b[^<]*(?:(?!<\/nav>)<[^<]*)*<\/nav>/gi, '')
+              .replace(/<header\b[^<]*(?:(?!<\/header>)<[^<]*)*<\/header>/gi, '')
+              .replace(/<footer\b[^<]*(?:(?!<\/footer>)<[^<]*)*<\/footer>/gi, '')
+              .replace(/<aside\b[^<]*(?:(?!<\/aside>)<[^<]*)*<\/aside>/gi, '')
+              .replace(/<form\b[^<]*(?:(?!<\/form>)<[^<]*)*<\/form>/gi, '')
+              .replace(/<svg\b[^<]*(?:(?!<\/svg>)<[^<]*)*<\/svg>/gi, '')
+              .replace(/<!--[\s\S]*?-->/g, '');
+
+            if (!isVideo) {
+              const videoTagMatch = cleanedHtml.match(/<video[^>]+src=["']([^"']+)["']/i);
+              const iframeVideoMatch = cleanedHtml.match(/<iframe[^>]+src=["']([^"']*(?:youtube|vimeo|dailymotion|embed)[^"']*)["']/i);
+              if (videoTagMatch && videoTagMatch[1]) {
+                isVideo = true;
+                videoDirectUrl = videoTagMatch[1];
+              } else if (iframeVideoMatch && iframeVideoMatch[1]) {
+                isVideo = true;
+                videoEmbedUrl = iframeVideoMatch[1];
+              }
+            }
+
+            const pMatches = cleanedHtml.matchAll(/<p[^>]*>([\s\S]*?)<\/p>/gi);
+            for (const match of pMatches) {
+              const text = match[1]
+                .replace(/<[^>]+>/g, '')
+                .replace(/&nbsp;/g, ' ')
+                .replace(/&amp;/g, '&')
+                .replace(/&quot;/g, '"')
+                .replace(/&#39;/g, "'")
+                .trim();
+              if (text.length > 35 && !/cookie|policy|terms of service|subscribe|sign up|rights reserved/i.test(text)) {
+                paragraphs.push(text);
+              }
+            }
+
+            if (paragraphs.length > 0) {
+              textContent = paragraphs.join('\n\n');
+            }
+          }
+        } catch {}
+      }
+
+      if (paragraphs.length === 0 && textContent) {
+        paragraphs = textContent
+          .split(/\n\s*\n/)
+          .map((p) => p.trim())
+          .filter((p) => p.length > 25);
+      }
+
+      if (!parsedTitle) {
+        parsedTitle = siteName || targetUrl;
+      }
+
+      const wordCount = paragraphs.join(' ').split(/\s+/).filter(Boolean).length;
+      const readingTimeMinutes = Math.max(1, Math.ceil(wordCount / 180));
+
+      res.json({
+        ok: true,
+        url: targetUrl,
+        title: parsedTitle,
+        siteName,
+        author,
+        publishedDate,
+        heroImage,
+        isVideo,
+        videoEmbedUrl,
+        videoDirectUrl,
+        videoId,
+        paragraphs,
+        textContent,
+        wordCount,
+        readingTime: `${readingTimeMinutes} دقائق قراءة`,
+      });
+    } catch (e: unknown) {
+      const msg = e instanceof Error ? e.message : String(e);
+      res.status(500).json({ error: msg });
+    }
+  });
+
   // ═══════════════════════════════════════════════════════════
   // 5 EXTERNAL DATABASES: VIDEO STORAGE, WATCH HISTORY & OFFLINE PLAYBACK
   // ═══════════════════════════════════════════════════════════
