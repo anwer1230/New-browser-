@@ -49,6 +49,14 @@ import {
   Maximize2,
   HardDrive,
   Video,
+  Mic,
+  Camera,
+  Bell,
+  Sparkles,
+  Image,
+  Smartphone,
+  Monitor,
+  Music,
 } from 'lucide-react';
 
 // ═══ نماذج بيانات بنية العمليات المتعددة وخدمة VPN وقواعد البيانات ═══
@@ -99,6 +107,7 @@ export interface VideoRecord {
   playedAt: string;
   isCachedOffline: boolean;
   pageUrl: string;
+  channel?: string;
 }
 
 export interface UserProfile {
@@ -162,39 +171,43 @@ const AVAILABLE_VPN_SERVERS: VpnServerInfo[] = [
 const SAMPLE_VIDEOS: VideoRecord[] = [
   {
     id: 'vid_1',
-    title: 'فيلم وثائقي: استكشاف الفضاء والكون بالدقة العالية (Full HD)',
+    title: 'THE BEST SONGS OF ALL TIME - Top Acoustic & Pop Hits',
+    channel: 'Lewis Capaldi · YouTube',
     streamUrl: 'https://commondatastorage.googleapis.com/gtv-videos-bucket/sample/TearsOfSteel.mp4',
-    thumbnail: 'https://commondatastorage.googleapis.com/gtv-videos-bucket/sample/images/TearsOfSteel.jpg',
-    duration: '12:14',
-    playedAt: 'اليوم 10:15 ص',
+    thumbnail: 'https://images.unsplash.com/photo-1511671782779-c97d3d27a1d4?w=600&q=80',
+    duration: '16:26',
+    playedAt: '2026/07/06',
     isCachedOffline: true,
-    pageUrl: 'https://anwerbrowser.local/videos/space-exploration',
+    pageUrl: 'https://youtube.com/watch?v=best-songs',
   },
   {
     id: 'vid_2',
-    title: 'مغامرة الرسوم المتحركة الخيالية — Sintel في رحلة استكشافية',
+    title: 'Top Hits Radio 2026 - Non Stop English Songs Playlist',
+    channel: 'Vevo UK · YouTube',
     streamUrl: 'https://commondatastorage.googleapis.com/gtv-videos-bucket/sample/Sintel.mp4',
-    thumbnail: 'https://commondatastorage.googleapis.com/gtv-videos-bucket/sample/images/Sintel.jpg',
-    duration: '08:52',
+    thumbnail: 'https://images.unsplash.com/photo-1470225620780-dba8ba36b745?w=600&q=80',
+    duration: '1:58:13',
     playedAt: 'أمس 04:20 م',
     isCachedOffline: true,
-    pageUrl: 'https://anwerbrowser.local/videos/sintel-animation',
+    pageUrl: 'https://youtube.com/watch?v=top-hits',
   },
   {
     id: 'vid_3',
-    title: 'عرض تقني: ثورة الحوسبة والذكاء الاصطناعي في متصفحات المستقبل',
+    title: 'فيلم وثائقي: استكشاف الفضاء والكون بالدقة العالية (Full HD)',
+    channel: 'Space Science · YouTube',
     streamUrl: 'https://commondatastorage.googleapis.com/gtv-videos-bucket/sample/ElephantsDream.mp4',
-    thumbnail: 'https://commondatastorage.googleapis.com/gtv-videos-bucket/sample/images/ElephantsDream.jpg',
+    thumbnail: 'https://images.unsplash.com/photo-1451187580459-43490279c0fa?w=600&q=80',
     duration: '10:54',
     playedAt: 'أمس 08:45 م',
     isCachedOffline: true,
-    pageUrl: 'https://anwerbrowser.local/videos/future-ai',
+    pageUrl: 'https://anwerbrowser.local/videos/space',
   },
   {
     id: 'vid_4',
-    title: 'مغامرة الطبيعة والأرانب الكرتونية — Big Buck Bunny',
+    title: 'مغامرة الرسوم المتحركة الكرتونية — Big Buck Bunny',
+    channel: 'Blender Studio · YouTube',
     streamUrl: 'https://commondatastorage.googleapis.com/gtv-videos-bucket/sample/BigBuckBunny.mp4',
-    thumbnail: 'https://commondatastorage.googleapis.com/gtv-videos-bucket/sample/images/BigBuckBunny.jpg',
+    thumbnail: 'https://images.unsplash.com/photo-1534447677768-be436bb09401?w=600&q=80',
     duration: '09:56',
     playedAt: 'قبل 3 أيام',
     isCachedOffline: true,
@@ -203,7 +216,20 @@ const SAMPLE_VIDEOS: VideoRecord[] = [
 ];
 
 export default function App() {
-  // ═══ 1. قاعدة بيانات التخزين ونافذة الموافقة والاعتماد ═══
+  // ═══ 1. وضع العرض (Mobile View vs Desktop View) ═══
+  const [isMobileMode, setIsMobileMode] = useState<boolean>(true); // وضع الهاتف الذكي الافتراضي لكروم
+  const [isTabSwitcherOpen, setIsTabSwitcherOpen] = useState<boolean>(false);
+
+  // ═══ 2. أوضاع بحث جوجل (Google SERP Modes) ═══
+  const [activeSearchMode, setActiveSearchMode] = useState<
+    'all' | 'ai' | 'videos' | 'images' | 'shorts' | 'news' | 'apps' | 'books' | 'pdf'
+  >('all');
+  const [isAiOverviewExpanded, setIsAiOverviewExpanded] = useState<boolean>(true);
+  const [isVoiceListening, setIsVoiceListening] = useState<boolean>(false);
+  const [moreVideosCount, setMoreVideosCount] = useState<number>(3);
+  const [moreAppsCount, setMoreAppsCount] = useState<number>(3);
+
+  // ═══ 3. قاعدة بيانات التخزين ونافذة الموافقة والاعتماد ═══
   const [databaseApproved, setDatabaseApproved] = useState<boolean>(() => {
     try {
       const saved = localStorage.getItem('anwer_database_approved');
@@ -211,10 +237,9 @@ export default function App() {
     } catch {}
     return true;
   });
-
   const [isDbApprovalModalOpen, setIsDbApprovalModalOpen] = useState<boolean>(false);
 
-  // ═══ 2. سجل الفيديوهات المشاهدة المحفوظة للمشاهدة بدون إنترنت ═══
+  // ═══ 4. سجل الفيديوهات المشاهدة المحفوظة للمشاهدة بدون إنترنت ═══
   const [videoWatchHistory, setVideoWatchHistory] = useState<VideoRecord[]>(() => {
     try {
       const saved = localStorage.getItem('anwer_video_watch_history');
@@ -231,47 +256,47 @@ export default function App() {
   const [videoPlaybackRate, setVideoPlaybackRate] = useState<number>(1);
   const videoPlayerRef = useRef<HTMLVideoElement | null>(null);
 
-  // ═══ 3. Free VPN الدائم والمستقر ═══
+  // ═══ 5. Free VPN الدائم والمستقر في الخلفية ═══
   const [vpnEnabled, setVpnEnabled] = useState<boolean>(() => {
     try {
       const saved = localStorage.getItem('anwer_vpn_enabled');
       if (saved !== null) return saved === 'true';
     } catch {}
-    return true; // تشغيل تلقائي دائم وثابت في الخلفية
+    return true;
   });
 
   const [selectedVpn, setSelectedVpn] = useState<VpnServerInfo>(AVAILABLE_VPN_SERVERS[0]);
   const [vpnBytesProtected, setVpnBytesProtected] = useState<number>(14.85);
   const [isVpnModalOpen, setIsVpnModalOpen] = useState<boolean>(false);
 
-  // ═══ 4. وضع توفير البيانات الذكي والسرعة الفائقة ═══
+  // ═══ 6. وضع توفير البيانات الذكي والسرعة الفائقة ═══
   const [dataSaver, setDataSaver] = useState<boolean>(() => {
     try {
       const saved = localStorage.getItem('anwer_data_saver');
       if (saved !== null) return saved === 'true';
     } catch {}
-    return true; // مفعّل تلقائياً لتسريع التصفح في كل الظروف
+    return true;
   });
   const [networkSpeedTier, setNetworkSpeedTier] = useState<string>('فائقة (Turbo Stream)');
   const [savedDataMB, setSavedDataMB] = useState<number>(8.4);
   const [isOnline, setIsOnline] = useState<boolean>(navigator.onLine ?? true);
 
-  // ═══ 5. التبويبات والملاحة (Multi-Tab Navigation) ═══
+  // ═══ 7. التبويبات والملاحة (Chrome Multi-Process Navigation) ═══
   const [tabs, setTabs] = useState<TabItem[]>([
     {
       id: 'tab_1',
       pid: 101,
-      title: 'علامة تبويب جديدة',
-      url: 'about:blank',
-      history: ['about:blank'],
+      title: 'songs - بحث Google',
+      url: 'https://www.google.com/search?q=songs',
+      history: ['https://www.google.com/search?q=songs'],
       historyIndex: 0,
       loading: false,
       isCrashed: false,
     },
   ]);
   const [activeTabId, setActiveTabId] = useState<string>('tab_1');
-  const [urlInput, setUrlInput] = useState<string>('');
-  const [searchQuery, setSearchQuery] = useState<string>('');
+  const [urlInput, setUrlInput] = useState<string>('google.com/search?q=songs');
+  const [searchQuery, setSearchQuery] = useState<string>('songs');
   const [zoomLevel, setZoomLevel] = useState<number>(100);
 
   // شريط الإشارات المرجعية
@@ -282,15 +307,14 @@ export default function App() {
       if (raw) return JSON.parse(raw);
     } catch {}
     return [
-      { id: 'b_1', title: 'ويكيبيديا', url: 'https://ar.wikipedia.org' },
-      { id: 'b_2', title: 'أخبار التقنية', url: 'https://news.ycombinator.com' },
-      { id: 'b_3', title: 'BBC عربي', url: 'https://www.bbc.com/arabic' },
-      { id: 'b_4', title: 'GitHub', url: 'https://github.com' },
-      { id: 'b_5', title: 'Google بحث', url: 'https://www.google.com' },
+      { id: 'b_1', title: 'Google بحث', url: 'https://www.google.com' },
+      { id: 'b_2', title: 'YouTube أغاني', url: 'https://www.youtube.com' },
+      { id: 'b_3', title: 'Spotify Web', url: 'https://open.spotify.com' },
+      { id: 'b_4', title: 'ويكيبيديا', url: 'https://ar.wikipedia.org' },
     ];
   });
 
-  // البحث والتصفية في سجل التصفح (History Search & Filter)
+  // البحث والتصفية في سجل التصفح
   const [historySearchQuery, setHistorySearchQuery] = useState<string>('');
   const [historyFilterCategory, setHistoryFilterCategory] = useState<'all' | 'searches' | 'domains'>('all');
 
@@ -299,17 +323,20 @@ export default function App() {
       const raw = localStorage.getItem('anwer_history');
       if (raw) return JSON.parse(raw);
     } catch {}
-    return [];
+    return [
+      { title: 'songs - بحث Google', url: 'https://www.google.com/search?q=songs', time: '12:30 م' },
+      { title: 'BEST SONGS OF ALL TIME - Spotify', url: 'https://open.spotify.com', time: '12:28 م' },
+    ];
   });
 
   const [downloadsList, setDownloadsList] = useState<DownloadItem[]>([
     {
       id: 'd_1',
-      filename: 'anwerbrowser-setup.html',
+      filename: 'songs-playlist.m3u',
       url: 'https://anwerbrowser.local',
-      size: '2.4 MB',
+      size: '1.2 MB',
       status: 'completed',
-      time: 'اليوم 09:30 ص',
+      time: 'اليوم 12:20 م',
     },
   ]);
 
@@ -320,9 +347,9 @@ export default function App() {
       if (raw) return JSON.parse(raw);
     } catch {}
     return {
-      isLoggedIn: false,
-      email: '',
-      name: '',
+      isLoggedIn: true,
+      email: 'anwer@gmail.com',
+      name: 'أنور القرشي',
       syncEnabled: true,
     };
   });
@@ -343,6 +370,17 @@ export default function App() {
     setTimeout(() => setToastMsg(null), 3200);
   };
 
+  // استخراج كلمة البحث الحالية من الرابط
+  const getCurrentSearchQuery = (): string => {
+    try {
+      if (activeTab.url.includes('google.com/search')) {
+        const u = new URL(activeTab.url);
+        return u.searchParams.get('q') || searchQuery || 'songs';
+      }
+    } catch {}
+    return searchQuery || 'songs';
+  };
+
   // ═══ مراقبة حالة الشبكة والسرعة ═══
   useEffect(() => {
     const handleOnline = () => {
@@ -359,11 +397,9 @@ export default function App() {
 
     if ('connection' in navigator) {
       const conn = (navigator as any).connection;
-      if (conn) {
-        if (conn.saveData || conn.effectiveType === '2g' || conn.effectiveType === 'slow-2g') {
-          setDataSaver(true);
-          setNetworkSpeedTier('شبكة ضعيفة (توفير فائق مفعّل)');
-        }
+      if (conn && (conn.saveData || conn.effectiveType === '2g' || conn.effectiveType === 'slow-2g')) {
+        setDataSaver(true);
+        setNetworkSpeedTier('شبكة ضعيفة (توفير فائق مفعّل)');
       }
     }
 
@@ -373,12 +409,12 @@ export default function App() {
     };
   }, []);
 
-  // مزامنة شريط العناوين مع التبويب النشط
+  // مزامنة شريط العناوين
   useEffect(() => {
-    setUrlInput(activeTab.url);
+    setUrlInput(activeTab.url.replace(/^https?:\/\//, ''));
   }, [activeTab.url, activeTabId]);
 
-  // حفظ الإشارات والتاريخ والـ VPN والفيديوهات وقاعدة البيانات محلياً
+  // حفظ الإشارات والسجلات محلياً
   useEffect(() => {
     try {
       localStorage.setItem('anwer_bookmarks', JSON.stringify(bookmarks));
@@ -391,7 +427,7 @@ export default function App() {
     } catch {}
   }, [bookmarks, historyList, userProfile, vpnEnabled, dataSaver, databaseApproved, videoWatchHistory]);
 
-  // محاكاة استهلاك بيانات التشفير الآمنة مع التصفح
+  // استهلاك بيانات التشفير المحمية
   useEffect(() => {
     const interval = setInterval(() => {
       if (vpnEnabled) {
@@ -407,7 +443,6 @@ export default function App() {
     setIsVideoPlayerOpen(true);
     setVideoPlaybackRate(1);
 
-    // إضافة أو تحديث الفيديو في سجل المشاهدات المحفوظة
     setVideoWatchHistory((prev) => {
       const exists = prev.find((v) => v.id === video.id || v.streamUrl === video.streamUrl);
       const updatedItem: VideoRecord = {
@@ -429,7 +464,7 @@ export default function App() {
       } catch {}
     }
 
-    showToast(`🎬 تم تشغيل وحفظ الفيديو في السجل للمشاهدة بدون إنترنت: ${video.title.slice(0, 30)}...`);
+    showToast(`🎬 تشغيل وحفظ الفيديو للمشاهدة بدون إنترنت: ${video.title.slice(0, 30)}...`);
   };
 
   // تشغيل رابط فيديو مخصص
@@ -441,7 +476,7 @@ export default function App() {
       id: `vid_custom_${Date.now()}`,
       title: customVideoTitleInput.trim() || 'فيديو تم تشغيله من الرابط المباشر',
       streamUrl: customVideoUrlInput.trim(),
-      thumbnail: 'https://images.unsplash.com/photo-1574717024653-61fd2cf4d44d?w=400&q=80',
+      thumbnail: 'https://images.unsplash.com/photo-1511671782779-c97d3d27a1d4?w=600&q=80',
       duration: 'مباشر',
       playedAt: new Date().toLocaleTimeString('ar-SA', { hour: '2-digit', minute: '2-digit' }),
       isCachedOffline: true,
@@ -453,7 +488,7 @@ export default function App() {
     handlePlayVideo(newVid);
   };
 
-  // ═══ اعتماد وموافقة قاعدة البيانات ═══
+  // اعتماد وموافقة قاعدة البيانات
   const handleApproveDatabase = () => {
     setDatabaseApproved(true);
     setIsDbApprovalModalOpen(false);
@@ -466,20 +501,17 @@ export default function App() {
     showToast('✅ تم اعتماد قاعدة البيانات بنجاح للتخزين الدائم للفيديوهات والسجلات');
   };
 
-  // حذف فيديو من السجل
   const handleDeleteVideoRecord = (videoId: string, e: React.MouseEvent) => {
     e.stopPropagation();
     setVideoWatchHistory((prev) => prev.filter((v) => v.id !== videoId));
     showToast('تم حذف الفيديو من السجل');
   };
 
-  // مسح كافة الفيديوهات المحفوظة
   const handleClearAllVideos = () => {
     setVideoWatchHistory([]);
     showToast('تم مسح مكتبة الفيديوهات المحفوظة');
   };
 
-  // تغيير سرعة تشغيل الفيديو
   const handleChangePlaybackRate = (rate: number) => {
     setVideoPlaybackRate(rate);
     if (videoPlayerRef.current) {
@@ -487,12 +519,23 @@ export default function App() {
     }
   };
 
+  // البحث الصوتي الذكي (Voice Search)
+  const handleVoiceSearch = () => {
+    setIsVoiceListening(true);
+    showToast('🎤 جاري الاستماع لصوتك... قل كلمة البحث');
+    setTimeout(() => {
+      setIsVoiceListening(false);
+      navigateCurrentTab('songs');
+      showToast('🔍 تم التعرف على الصوت: "songs"');
+    }, 2500);
+  };
+
   // ═══ قائمة العمليات النشطة لمدير مهام المتصفح (Chrome Task Manager) ═══
   const getActiveProcesses = (): ProcessItem[] => {
     const coreProcesses: ProcessItem[] = [
-      { pid: 1, type: 'browser', name: 'Browser (العملية الرئيسية وواجهة المستخدم)', memoryMB: 148, cpuPercent: 1.2 },
+      { pid: 1, type: 'browser', name: 'Browser (العملية الرئيسية وواجهة Chrome)', memoryMB: 148, cpuPercent: 1.2 },
       { pid: 2, type: 'gpu', name: 'GPU Process (Viz الرسوميات وتسريع الفيديو)', memoryMB: 94, cpuPercent: 2.4 },
-      { pid: 3, type: 'network', name: 'Network Service (محرك الجلب الفوري والذاكرة السريعة)', memoryMB: 42, cpuPercent: 0.5 },
+      { pid: 3, type: 'network', name: 'Network Service (Google SERP Engine & Fast Cache)', memoryMB: 42, cpuPercent: 0.5 },
       { pid: 4, type: 'storage', name: 'Storage Service (IndexedDB & Video Cache Engine)', memoryMB: 38, cpuPercent: 0.2 },
       {
         pid: 5,
@@ -534,7 +577,7 @@ export default function App() {
     }
   };
 
-  // ═══ تنقية الرابط من معاملات التتبع الإعلانية (Anti-Tracking) ═══
+  // تنقية الرابط من معاملات التتبع الإعلانية
   const sanitizeUrlTracking = (url: string): string => {
     try {
       const u = new URL(url);
@@ -561,24 +604,30 @@ export default function App() {
     }
   };
 
-  // ═══ التنقل الذكي فائق السرعة مع وضع توفير البيانات ═══
+  // ═══ التنقل الذكي فائق السرعة مع محرك بحث جوجل المدمج ═══
   const navigateCurrentTab = (rawInput: string) => {
     const trimmed = rawInput.trim();
     if (!trimmed) return;
 
     let targetUrl: string;
-
+    let newTitle: string;
     const isDirectVideoUrl = /\.(mp4|webm|ogg|m3u8)(\?.*)?$/i.test(trimmed);
 
     if (trimmed.startsWith('g ') || trimmed.startsWith('google ')) {
       const q = trimmed.replace(/^(g|google)\s+/, '');
       targetUrl = `https://www.google.com/search?q=${encodeURIComponent(q)}`;
+      newTitle = `${q} - بحث Google`;
+      setSearchQuery(q);
     } else if (trimmed.startsWith('http://') || trimmed.startsWith('https://')) {
       targetUrl = trimmed;
+      newTitle = trimmed.replace(/^https?:\/\//, '').split('/')[0];
     } else if (trimmed.includes('.') && !trimmed.includes(' ')) {
       targetUrl = `https://${trimmed}`;
+      newTitle = trimmed;
     } else {
       targetUrl = `https://www.google.com/search?q=${encodeURIComponent(trimmed)}`;
+      newTitle = `${trimmed} - بحث Google`;
+      setSearchQuery(trimmed);
     }
 
     if (vpnEnabled) {
@@ -590,7 +639,7 @@ export default function App() {
         id: `vid_${Date.now()}`,
         title: targetUrl.split('/').pop() || 'فيديو مباشر',
         streamUrl: targetUrl,
-        thumbnail: 'https://images.unsplash.com/photo-1574717024653-61fd2cf4d44d?w=400&q=80',
+        thumbnail: 'https://images.unsplash.com/photo-1511671782779-c97d3d27a1d4?w=600&q=80',
         duration: 'مباشر',
         playedAt: new Date().toLocaleTimeString('ar-SA', { hour: '2-digit', minute: '2-digit' }),
         isCachedOffline: true,
@@ -599,11 +648,11 @@ export default function App() {
       return;
     }
 
-    setUrlInput(targetUrl);
+    setUrlInput(targetUrl.replace(/^https?:\/\//, ''));
 
     setHistoryList((prev) => [
       {
-        title: targetUrl.includes('google.com/search') ? 'بحث Google' : targetUrl,
+        title: newTitle,
         url: targetUrl,
         time: new Date().toLocaleTimeString('ar-SA', { hour: '2-digit', minute: '2-digit' }),
       },
@@ -617,9 +666,7 @@ export default function App() {
         return {
           ...t,
           url: targetUrl,
-          title: targetUrl.includes('google.com/search')
-            ? 'نتائج البحث'
-            : targetUrl.replace(/^https?:\/\//, '').split('/')[0],
+          title: newTitle,
           history: nextHistory,
           historyIndex: nextHistory.length - 1,
           loading: true,
@@ -628,7 +675,7 @@ export default function App() {
       })
     );
 
-    const loadDelay = dataSaver ? 80 : 350;
+    const loadDelay = dataSaver ? 60 : 250;
     setTimeout(() => {
       setTabs((prev) =>
         prev.map((t) => (t.id === activeTabId ? { ...t, loading: false } : t))
@@ -636,7 +683,7 @@ export default function App() {
     }, loadDelay);
   };
 
-  // التحكم في التبويبات
+  // التحكم بالتبويبات
   const createNewTab = (initialUrl: string = 'about:blank') => {
     const newId = `tab_${Date.now()}`;
     const newPid = Math.floor(100 + Math.random() * 900);
@@ -652,6 +699,7 @@ export default function App() {
     };
     setTabs((prev) => [...prev, newTab]);
     setActiveTabId(newId);
+    setIsTabSwitcherOpen(false);
   };
 
   const closeTab = (tabId: string, e?: React.MouseEvent) => {
@@ -708,11 +756,11 @@ export default function App() {
       setTabs((prev) =>
         prev.map((t) => (t.id === activeTabId ? { ...t, loading: false } : t))
       );
-    }, dataSaver ? 80 : 300);
+    }, dataSaver ? 60 : 250);
   };
 
   const goHome = () => {
-    navigateCurrentTab('about:blank');
+    navigateCurrentTab('https://www.google.com/search?q=songs');
   };
 
   const handleToggleBookmark = () => {
@@ -733,20 +781,17 @@ export default function App() {
 
   const isCurrentBookmarked = bookmarks.some((b) => b.url === activeTab.url);
 
-  // حذف عنصر من السجل
   const handleDeleteHistoryItem = (index: number, e: React.MouseEvent) => {
     e.stopPropagation();
     setHistoryList((prev) => prev.filter((_, i) => i !== index));
     showToast('تم حذف العنصر من السجل');
   };
 
-  // مسح السجل كاملاً
   const handleClearAllHistory = () => {
     setHistoryList([]);
     showToast('تم مسح سجل التصفح بالكامل');
   };
 
-  // ═══ تصفية سجل التصفح بالكلمات المفتاحية والتصنيف ═══
   const filteredHistory = historyList.filter((item) => {
     const q = historySearchQuery.trim().toLowerCase();
     const matchesSearch =
@@ -755,7 +800,6 @@ export default function App() {
       item.url.toLowerCase().includes(q);
 
     if (!matchesSearch) return false;
-
     if (historyFilterCategory === 'searches') {
       return item.url.includes('google.com/search') || item.title.includes('بحث');
     }
@@ -765,683 +809,682 @@ export default function App() {
     return true;
   });
 
+  const currentSearchTerm = getCurrentSearchQuery();
+
   return (
     <div
       className="flex flex-col h-screen w-screen bg-[#F1F3F4] dark:bg-[#202124] text-[#202124] dark:text-[#E8EAED] font-sans select-none overflow-hidden"
       dir="rtl"
     >
       {/* ═══════════════════════════════════════════════════════════════
-          1. شريط التبويبات العلوي (Chrome Multi-Process Tab Strip)
+          أزرار التحكم العلوية والتبديل بين وضع الهاتف ووضع سطح المكتب
       ═══════════════════════════════════════════════════════════════ */}
-      <div className="flex items-center h-10 px-2 pt-1.5 bg-[#DEE1E6] dark:bg-[#1E1F22] border-b border-[#C7C9CC] dark:border-[#333539] overflow-x-auto no-scrollbar gap-1">
-        {tabs.map((tab) => {
-          const isActive = tab.id === activeTabId;
-          return (
-            <div
-              key={tab.id}
-              onClick={() => setActiveTabId(tab.id)}
-              className={`group relative flex items-center h-8.5 px-3 max-w-[220px] min-w-[120px] rounded-t-lg text-xs cursor-pointer transition select-none ${
-                isActive
-                  ? 'bg-white dark:bg-[#2B2D30] text-[#1A73E8] dark:text-white font-semibold shadow-xs'
-                  : 'text-[#5F6368] dark:text-[#9AA0A6] hover:bg-[#E8EAED]/70 dark:hover:bg-[#2B2D30]/50'
-              }`}
-            >
-              <div className="flex items-center gap-2 truncate flex-1 pl-1">
-                {tab.loading ? (
-                  <RotateCw className="w-3.5 h-3.5 animate-spin text-blue-500 shrink-0" />
-                ) : tab.isCrashed ? (
-                  <Activity className="w-3.5 h-3.5 text-red-500 shrink-0" />
-                ) : tab.url === 'about:blank' ? (
-                  <Globe className="w-3.5 h-3.5 text-gray-400 shrink-0" />
-                ) : (
-                  <Globe className="w-3.5 h-3.5 text-blue-500 shrink-0" />
-                )}
-                <span className="truncate text-[11px] sm:text-xs">
-                  {tab.title || (tab.url === 'about:blank' ? 'علامة تبويب جديدة' : tab.url)}
-                </span>
-              </div>
-              <button
-                type="button"
-                onClick={(e) => closeTab(tab.id, e)}
-                className="w-4 h-4 rounded-full flex items-center justify-center opacity-0 group-hover:opacity-100 hover:bg-black/10 dark:hover:bg-white/10 transition text-gray-500"
-                title="إغلاق التبويب (Ctrl+W)"
-              >
-                <X className="w-3 h-3" />
-              </button>
-            </div>
-          );
-        })}
+      <div className="flex items-center justify-between h-9 px-3 bg-[#1A73E8] text-white text-xs select-none">
+        <div className="flex items-center gap-2">
+          <span className="font-bold tracking-tight">AnwerBrowser Chrome Engine</span>
+          <span className="text-blue-200">|</span>
+          <button
+            type="button"
+            onClick={() => setIsMobileMode((prev) => !prev)}
+            className="flex items-center gap-1.5 px-2 py-0.5 rounded-full bg-white/20 hover:bg-white/30 transition cursor-pointer font-bold"
+            title="التبديل بين واجهة كروم للهاتف وواجهة سطح المكتب"
+          >
+            {isMobileMode ? <Smartphone className="w-3.5 h-3.5" /> : <Monitor className="w-3.5 h-3.5" />}
+            <span>{isMobileMode ? 'وضع هاتف كروم (Mobile UI)' : 'وضع سطح المكتب (Desktop UI)'}</span>
+          </button>
+        </div>
 
-        <button
-          type="button"
-          onClick={() => createNewTab()}
-          className="w-7 h-7 rounded-full flex items-center justify-center hover:bg-[#C7C9CC] dark:hover:bg-[#333539] text-[#5F6368] dark:text-[#9AA0A6] transition cursor-pointer shrink-0"
-          title="علامة تبويب جديدة (Ctrl+T)"
-        >
-          <Plus className="w-4 h-4" />
-        </button>
+        <div className="flex items-center gap-3">
+          {/* مؤشر WireGuard VPN الدائم */}
+          <button
+            type="button"
+            onClick={() => setIsVpnModalOpen(true)}
+            className="flex items-center gap-1 text-[11px] font-bold text-emerald-200 hover:text-white"
+          >
+            <Shield className="w-3 h-3 text-emerald-300" />
+            <span>VPN {selectedVpn.flag} نشط</span>
+          </button>
 
-        <div className="flex-1" />
+          {/* مؤشر قاعدة البيانات */}
+          <button
+            type="button"
+            onClick={() => setIsDbApprovalModalOpen(true)}
+            className="flex items-center gap-1 text-[11px] font-bold text-blue-100 hover:text-white"
+          >
+            <Database className="w-3 h-3 text-blue-200" />
+            <span>قاعدة البيانات: معتمدة ✅</span>
+          </button>
 
-        {/* مؤشر حالة الشبكة والسرعة */}
-        <div className="hidden md:flex items-center gap-2 text-[11px] px-2 text-[#5F6368] dark:text-[#9AA0A6]">
-          <span className="flex items-center gap-1 font-mono text-emerald-600 dark:text-emerald-400 font-bold">
-            <Zap className="w-3 h-3 fill-current" />
-            {networkSpeedTier}
-          </span>
-          <span className="text-gray-300 dark:text-gray-600">|</span>
-          <span className="font-mono text-[10px]">توفير: {savedDataMB}MB</span>
+          {/* مكتبة الفيديوهات */}
+          <button
+            type="button"
+            onClick={() => setIsOfflineVideosDrawerOpen(true)}
+            className="flex items-center gap-1 text-[11px] font-bold text-rose-200 hover:text-white"
+          >
+            <Film className="w-3 h-3 text-rose-300" />
+            <span>الفيديوهات ({videoWatchHistory.length})</span>
+          </button>
         </div>
       </div>
 
       {/* ═══════════════════════════════════════════════════════════════
-          2. شريط التنقل وعنوان الويب المباشر (Omnibox & Controls)
+          الحاوية الرئيسية: تصميم الهاتف الذكي (Mobile Chrome Frame)
       ═══════════════════════════════════════════════════════════════ */}
-      <div className="flex items-center h-12 px-2 bg-white dark:bg-[#2B2D30] border-b border-[#E0E2E6] dark:border-[#3C4043] gap-1.5 shadow-2xs">
-        {/* أزرار التنقل الخلفي والأمامي والتحديث والصفحة الرئيسية */}
-        <div className="flex items-center gap-1 shrink-0 text-[#5F6368] dark:text-[#9AA0A6]">
-          <button
-            type="button"
-            onClick={goForward}
-            disabled={activeTab.historyIndex <= 0}
-            className="p-1.5 rounded-full hover:bg-black/5 dark:hover:bg-white/10 disabled:opacity-30 disabled:hover:bg-transparent transition cursor-pointer"
-            title="للخلف (Alt + Right Arrow)"
-          >
-            <ArrowRight className="w-4 h-4" />
-          </button>
-          <button
-            type="button"
-            onClick={goBack}
-            disabled={activeTab.historyIndex >= activeTab.history.length - 1}
-            className="p-1.5 rounded-full hover:bg-black/5 dark:hover:bg-white/10 disabled:opacity-30 disabled:hover:bg-transparent transition cursor-pointer"
-            title="للأمام (Alt + Left Arrow)"
-          >
-            <ArrowLeft className="w-4 h-4" />
-          </button>
-          <button
-            type="button"
-            onClick={reloadTab}
-            className="p-1.5 rounded-full hover:bg-black/5 dark:hover:bg-white/10 transition cursor-pointer"
-            title="إعادة تحميل الصفحة (Ctrl+R)"
-          >
-            <RotateCw className={`w-4 h-4 ${activeTab.loading ? 'animate-spin text-blue-500' : ''}`} />
-          </button>
+      <div
+        className={`flex-1 flex flex-col overflow-hidden mx-auto transition-all ${
+          isMobileMode
+            ? 'w-full max-w-md my-1 rounded-3xl shadow-2xl border-4 border-[#2B2D30] bg-white dark:bg-[#202124]'
+            : 'w-full h-full'
+        }`}
+      >
+        {/* 1. أزرار النظام في هاتف كروم (Status Bar: Time, Wifi, Battery, VPN) */}
+        {isMobileMode && (
+          <div className="flex items-center justify-between h-6 px-4 bg-[#F8F9FA] dark:bg-[#1E1F22] text-[#5F6368] dark:text-[#9AA0A6] text-[11px] font-mono border-b border-gray-200 dark:border-gray-800 shrink-0">
+            <span className="font-bold text-gray-800 dark:text-gray-200">12:30</span>
+            <div className="flex items-center gap-2">
+              <span title="VPN مشفر 256-bit نشط"><Key className="w-3 h-3 text-emerald-600" /></span>
+              <Wifi className="w-3 h-3 text-blue-600" />
+              <span className="font-bold">5G</span>
+              <span className="text-[10px] font-bold">100%</span>
+            </div>
+          </div>
+        )}
+
+        {/* 2. الطبقة العليا: واجهة متصفح كروم (Chrome UI Top Bar) */}
+        <div className="flex items-center h-12 px-2 bg-[#F8F9FA] dark:bg-[#1E1F22] border-b border-[#E0E2E6] dark:border-[#3C4043] gap-1.5 shrink-0">
+          {/* زر الصفحة الرئيسية (🏠) */}
           <button
             type="button"
             onClick={goHome}
-            className="p-1.5 rounded-full hover:bg-black/5 dark:hover:bg-white/10 transition cursor-pointer"
-            title="الصفحة الرئيسية (Alt+Home)"
+            className="p-1.5 rounded-full hover:bg-black/5 dark:hover:bg-white/10 text-[#5F6368] dark:text-[#9AA0A6] transition cursor-pointer shrink-0"
+            title="الصفحة الرئيسية (Home)"
           >
             <Home className="w-4 h-4" />
           </button>
-        </div>
 
-        {/* شريط العنوان التفاعلي (Omnibox) */}
-        <form
-          onSubmit={(e) => {
-            e.preventDefault();
-            navigateCurrentTab(urlInput);
-          }}
-          className="flex-1 flex items-center h-8.5 px-3 bg-[#F1F3F4] dark:bg-[#1E1F22] hover:bg-[#E8EAED] dark:hover:bg-[#1E1F22]/90 rounded-full border border-transparent focus-within:border-[#1A73E8] focus-within:bg-white dark:focus-within:bg-[#202124] transition text-xs gap-2"
-        >
-          {activeTab.url.startsWith('https://') ? (
-            <span title="اتصال مشفر وآمن (HTTPS)"><Lock className="w-3.5 h-3.5 text-emerald-600 shrink-0" /></span>
-          ) : (
-            <Globe className="w-3.5 h-3.5 text-gray-400 shrink-0" />
-          )}
-
-          <input
-            type="text"
-            value={urlInput}
-            onChange={(e) => setUrlInput(e.target.value)}
-            placeholder="ابحث في Google أو اكتب عنوان ويب (أو رابط فيديو MP4)..."
-            className="flex-1 bg-transparent text-xs sm:text-sm text-[#202124] dark:text-[#E8EAED] focus:outline-none dir-ltr text-left font-mono truncate"
-          />
-
-          <button
-            type="submit"
-            className="h-6 px-3 rounded-full bg-[#1A73E8] hover:bg-blue-700 text-white font-bold text-[11px] sm:text-xs flex items-center gap-1 cursor-pointer shrink-0 transition"
+          {/* شريط العنوان (Omnibox) مع الرابط المباشر */}
+          <form
+            onSubmit={(e) => {
+              e.preventDefault();
+              navigateCurrentTab(urlInput);
+            }}
+            className="flex-1 flex items-center h-9 px-3 bg-white dark:bg-[#2B2D30] rounded-full border border-gray-200 dark:border-gray-700 shadow-2xs text-xs gap-2 overflow-hidden"
           >
-            <span>انتقال</span>
-            <ArrowLeft className="w-3 h-3" />
-          </button>
-        </form>
+            <span title="اتصال مشفر وآمن (HTTPS)">
+              <Lock className="w-3 h-3 text-emerald-600 shrink-0" />
+            </span>
 
-        {/* 🎬 زر مكتبة الفيديوهات المحفوظة للمشاهدة بدون إنترنت */}
-        <button
-          type="button"
-          onClick={() => setIsOfflineVideosDrawerOpen(true)}
-          className="px-2.5 py-1.5 rounded-full text-xs font-bold flex items-center gap-1.5 transition cursor-pointer border bg-rose-50 dark:bg-rose-950/40 text-rose-700 dark:text-rose-300 border-rose-300 dark:border-rose-800"
-          title="مكتبة الفيديوهات المحفوظة: شغّل وشاهد أي فيديو بدون نت"
-        >
-          <Film className="w-3.5 h-3.5 text-rose-600" />
-          <span className="hidden lg:inline">فيديوهات محفوظة</span>
-          <span className="w-4.5 h-4.5 rounded-full bg-rose-600 text-white text-[10px] flex items-center justify-center font-mono">
-            {videoWatchHistory.length}
-          </span>
-        </button>
+            <input
+              type="text"
+              value={urlInput}
+              onChange={(e) => setUrlInput(e.target.value)}
+              placeholder="google.com/search?q=..."
+              className="flex-1 bg-transparent text-xs text-[#202124] dark:text-[#E8EAED] focus:outline-none dir-ltr text-left font-mono truncate"
+            />
 
-        {/* 🗄️ مؤشر وزر اعتماد قاعدة البيانات للتخزين */}
-        <button
-          type="button"
-          onClick={() => setIsDbApprovalModalOpen(true)}
-          className={`px-2.5 py-1.5 rounded-full text-xs font-bold flex items-center gap-1.5 transition cursor-pointer border ${
-            databaseApproved
-              ? 'bg-blue-50 dark:bg-blue-950/40 text-blue-700 dark:text-blue-300 border-blue-300 dark:border-blue-800'
-              : 'bg-amber-50 text-amber-700 border-amber-300 animate-pulse'
-          }`}
-          title="اعتماد وترخيص قاعدة البيانات لحفظ الفيديوهات والسجلات"
-        >
-          <Database className="w-3.5 h-3.5 text-blue-600" />
-          <span className="hidden lg:inline">
-            {databaseApproved ? 'قاعدة البيانات: معتمدة' : 'اعتماد قاعدة البيانات'}
-          </span>
-          <span className="text-[10px]">{databaseApproved ? '✅' : '⚠️'}</span>
-        </button>
+            <button
+              type="button"
+              onClick={reloadTab}
+              className="p-1 rounded-full text-gray-400 hover:text-blue-600 transition"
+              title="إعادة تحميل"
+            >
+              <RotateCw className={`w-3.5 h-3.5 ${activeTab.loading ? 'animate-spin text-blue-600' : ''}`} />
+            </button>
+          </form>
 
-        {/* ⚡ زر وضع توفير البيانات والسرعة الفائقة للشبكات الضعيفة */}
-        <button
-          type="button"
-          onClick={() => {
-            setDataSaver((prev) => !prev);
-            showToast(!dataSaver ? '⚡ تم تفعيل وضع السرعة الفائقة وتوفير البيانات' : 'تم إيقاف وضع توفير البيانات');
-          }}
-          className={`px-2.5 py-1.5 rounded-full text-xs font-bold flex items-center gap-1.5 transition cursor-pointer border ${
-            dataSaver
-              ? 'bg-amber-50 dark:bg-amber-950/40 text-amber-700 dark:text-amber-300 border-amber-300 dark:border-amber-800'
-              : 'bg-gray-100 text-gray-500 border-gray-300'
-          }`}
-          title="وضع تسريع التصفح وتوفير البيانات: تحميل فوري واستجابة سريعة حتى في أضعف شبكات 2G/3G"
-        >
-          <Zap className={`w-3.5 h-3.5 ${dataSaver ? 'fill-current text-amber-500' : 'text-gray-400'}`} />
-          <span className="hidden xl:inline">{dataSaver ? 'سرعة 10x' : 'سرعة عادية'}</span>
-        </button>
-
-        {/* 🛡️ مؤشر Free VPN الدائم والثابت في الخلفية */}
-        <button
-          type="button"
-          onClick={() => setIsVpnModalOpen(true)}
-          className={`px-2.5 py-1.5 rounded-full text-xs font-bold flex items-center gap-1.5 transition cursor-pointer border ${
-            vpnEnabled
-              ? 'bg-emerald-50 dark:bg-emerald-950/40 text-emerald-700 dark:text-emerald-300 border-emerald-300 dark:border-emerald-800'
-              : 'bg-gray-100 text-gray-500 border-gray-300'
-          }`}
-          title="حالة Free VPN وحماية الخصوصية ومنع التتبع"
-        >
-          <div className={`w-2 h-2 rounded-full ${vpnEnabled ? 'bg-emerald-500 animate-pulse' : 'bg-gray-400'}`} />
-          <span className="hidden md:inline">VPN:</span>
-          <span>{vpnEnabled ? `${selectedVpn.flag} متصل` : 'معطّل'}</span>
-        </button>
-
-        {/* أدوات شريط العناوين الأيمن */}
-        <div className="flex items-center gap-1 shrink-0">
+          {/* علامة التبويب (Tab): مربع يعرض رقم التبويبات المفتوحة [1] أو [N] كمتصفح كروم */}
           <button
             type="button"
-            onClick={handleToggleBookmark}
-            className={`p-2 rounded-full transition cursor-pointer ${
-              isCurrentBookmarked
-                ? 'text-amber-500 fill-current bg-amber-50 dark:bg-amber-950/30'
-                : 'text-[#5F6368] hover:bg-black/5 dark:hover:bg-white/10'
-            }`}
-            title="إضافة إلى الإشارات المرجعية (Ctrl+D)"
+            onClick={() => setIsTabSwitcherOpen((prev) => !prev)}
+            className="w-7 h-7 rounded-lg border-2 border-[#5F6368] dark:border-[#9AA0A6] flex items-center justify-center font-bold text-xs text-[#5F6368] dark:text-[#9AA0A6] hover:bg-black/5 dark:hover:bg-white/10 transition cursor-pointer shrink-0"
+            title="التبويبات المفتوحة (Tab Switcher)"
           >
-            <Star className="w-4 h-4" fill={isCurrentBookmarked ? 'currentColor' : 'none'} />
+            <span>{tabs.length}</span>
           </button>
 
+          {/* زر +: لفتح تبويب جديد فورياً */}
           <button
             type="button"
-            onClick={() => setIsDownloadsDrawerOpen((prev) => !prev)}
-            className="p-2 rounded-full text-[#5F6368] hover:bg-black/5 dark:hover:bg-white/10 cursor-pointer transition relative"
-            title="التنزيلات (Ctrl+J)"
+            onClick={() => createNewTab('https://www.google.com/search?q=songs')}
+            className="p-1.5 rounded-full hover:bg-black/5 dark:hover:bg-white/10 text-[#5F6368] dark:text-[#9AA0A6] transition cursor-pointer shrink-0"
+            title="فتح تبويب جديد (+)"
           >
-            <Download className="w-4 h-4" />
+            <Plus className="w-4 h-4" />
           </button>
 
-          <button
-            type="button"
-            onClick={() => setIsProfileModalOpen(true)}
-            className="w-8 h-8 rounded-full bg-blue-600 text-white flex items-center justify-center font-bold text-xs hover:ring-2 hover:ring-blue-400 transition cursor-pointer"
-            title={userProfile.isLoggedIn ? userProfile.email : 'تسجيل الدخول إلى AnwerBrowser'}
-          >
-            {userProfile.isLoggedIn ? userProfile.name.charAt(0).toUpperCase() || 'A' : <User className="w-4 h-4" />}
-          </button>
-
-          {/* قائمة الخيارات الثلاث نقاط */}
-          <div className="relative">
+          {/* قائمة النقاط الثلاث (⋮): قائمة إعدادات المتصفح */}
+          <div className="relative shrink-0">
             <button
               type="button"
               onClick={() => setIsMenuOpen((prev) => !prev)}
-              className="p-2 rounded-full text-[#5F6368] hover:bg-black/5 dark:hover:bg-white/10 cursor-pointer transition"
-              title="تخصيص AnwerBrowser والتحكم فيه"
+              className="p-1.5 rounded-full hover:bg-black/5 dark:hover:bg-white/10 text-[#5F6368] dark:text-[#9AA0A6] transition cursor-pointer"
+              title="قائمة إعدادات كروم"
             >
               <MoreVertical className="w-4 h-4" />
             </button>
 
             {isMenuOpen && (
               <div
-                className="absolute left-0 mt-2 w-72 bg-white dark:bg-[#2B2D30] rounded-2xl shadow-xl border border-gray-200 dark:border-gray-700 py-2 z-50 text-xs"
+                className="absolute left-0 mt-2 w-64 bg-white dark:bg-[#2B2D30] rounded-2xl shadow-xl border border-gray-200 dark:border-gray-700 py-2 z-50 text-xs text-right"
                 onClick={() => setIsMenuOpen(false)}
               >
                 <button
                   type="button"
-                  onClick={() => createNewTab('https://www.google.com')}
-                  className="w-full px-4 py-2 hover:bg-gray-100 dark:hover:bg-white/5 flex items-center justify-between text-right"
+                  onClick={() => createNewTab('https://www.google.com/search?q=songs')}
+                  className="w-full px-4 py-2 hover:bg-gray-100 dark:hover:bg-white/5 flex items-center justify-between"
                 >
                   <span>علامة تبويب جديدة</span>
                   <span className="text-[10px] text-gray-400">Ctrl+T</span>
                 </button>
-
                 <button
                   type="button"
                   onClick={() => setIsOfflineVideosDrawerOpen(true)}
-                  className="w-full px-4 py-2 hover:bg-gray-100 dark:hover:bg-white/5 flex items-center justify-between text-right text-rose-600 font-bold"
+                  className="w-full px-4 py-2 hover:bg-gray-100 dark:hover:bg-white/5 flex items-center justify-between text-rose-600 font-bold"
                 >
-                  <div className="flex items-center gap-1.5">
-                    <Film className="w-3.5 h-3.5" />
-                    <span>مكتبة الفيديوهات المحفوظة (بدون نت)</span>
-                  </div>
+                  <span>مكتبة الفيديوهات المحفوظة</span>
                   <span className="text-[10px] bg-rose-100 text-rose-700 px-1.5 py-0.5 rounded-full font-mono">
                     {videoWatchHistory.length}
                   </span>
                 </button>
-
                 <button
                   type="button"
                   onClick={() => setIsDbApprovalModalOpen(true)}
-                  className="w-full px-4 py-2 hover:bg-gray-100 dark:hover:bg-white/5 flex items-center justify-between text-right text-blue-600 font-bold"
+                  className="w-full px-4 py-2 hover:bg-gray-100 dark:hover:bg-white/5 flex items-center justify-between text-blue-600 font-bold"
                 >
-                  <div className="flex items-center gap-1.5">
-                    <Database className="w-3.5 h-3.5" />
-                    <span>اعتماد وإعدادات قاعدة البيانات للتخزين</span>
-                  </div>
+                  <span>اعتماد قاعدة البيانات للتخزين</span>
                   <span className="text-[10px]">{databaseApproved ? 'معتمدة ✅' : 'مطلوبة ⚠️'}</span>
                 </button>
-
-                <button
-                  type="button"
-                  onClick={() => {
-                    setDataSaver((prev) => !prev);
-                    showToast(!dataSaver ? 'تم تفعيل وضع توفير البيانات ⚡' : 'تم تعطيل وضع توفير البيانات');
-                  }}
-                  className="w-full px-4 py-2 hover:bg-gray-100 dark:hover:bg-white/5 flex items-center justify-between text-right text-amber-600 font-bold"
-                >
-                  <div className="flex items-center gap-1.5">
-                    <Zap className="w-3.5 h-3.5" />
-                    <span>وضع توفير البيانات والسرعة</span>
-                  </div>
-                  <span className="text-[10px]">{dataSaver ? 'مفعّل ⚡' : 'معطّل'}</span>
-                </button>
-
-                <button
-                  type="button"
-                  onClick={() => setIsVpnModalOpen(true)}
-                  className="w-full px-4 py-2 hover:bg-gray-100 dark:hover:bg-white/5 flex items-center justify-between text-right text-emerald-600 font-bold"
-                >
-                  <div className="flex items-center gap-1.5">
-                    <Shield className="w-3.5 h-3.5" />
-                    <span>إعدادات Free VPN والخصوصية</span>
-                  </div>
-                  <span className="text-[10px] text-emerald-600">نشط 🟢</span>
-                </button>
-
-                <button
-                  type="button"
-                  onClick={() => setShowBookmarksBar((prev) => !prev)}
-                  className="w-full px-4 py-2 hover:bg-gray-100 dark:hover:bg-white/5 flex items-center justify-between text-right"
-                >
-                  <span>{showBookmarksBar ? 'إخفاء شريط الإشارات' : 'إظهار شريط الإشارات'}</span>
-                  <span className="text-[10px] text-gray-400">Ctrl+Shift+B</span>
-                </button>
-
                 <button
                   type="button"
                   onClick={() => setIsHistoryDrawerOpen(true)}
-                  className="w-full px-4 py-2 hover:bg-gray-100 dark:hover:bg-white/5 flex items-center justify-between text-right"
+                  className="w-full px-4 py-2 hover:bg-gray-100 dark:hover:bg-white/5 flex items-center justify-between"
                 >
-                  <span>السجل</span>
+                  <span>السجل والبحث المباشر</span>
                   <span className="text-[10px] text-gray-400">Ctrl+H</span>
                 </button>
-
                 <button
                   type="button"
                   onClick={() => setIsDownloadsDrawerOpen(true)}
-                  className="w-full px-4 py-2 hover:bg-gray-100 dark:hover:bg-white/5 flex items-center justify-between text-right"
+                  className="w-full px-4 py-2 hover:bg-gray-100 dark:hover:bg-white/5 flex items-center justify-between"
                 >
                   <span>التنزيلات</span>
                   <span className="text-[10px] text-gray-400">Ctrl+J</span>
                 </button>
-
-                <div className="h-px bg-gray-100 dark:bg-gray-700 my-1" />
-
-                <div className="px-4 py-2 flex items-center justify-between">
-                  <span>التكبير/التصغير</span>
-                  <div className="flex items-center gap-2">
-                    <button
-                      type="button"
-                      onClick={(e) => {
-                        e.stopPropagation();
-                        setZoomLevel((z) => Math.max(50, z - 10));
-                      }}
-                      className="px-2 py-0.5 rounded bg-gray-100 dark:bg-white/10 hover:bg-gray-200"
-                    >
-                      -
-                    </button>
-                    <span className="font-mono text-[11px]">{zoomLevel}%</span>
-                    <button
-                      type="button"
-                      onClick={(e) => {
-                        e.stopPropagation();
-                        setZoomLevel((z) => Math.min(200, z + 10));
-                      }}
-                      className="px-2 py-0.5 rounded bg-gray-100 dark:bg-white/10 hover:bg-gray-200"
-                    >
-                      +
-                    </button>
-                  </div>
-                </div>
-
                 <button
                   type="button"
                   onClick={() => setIsTaskManagerOpen(true)}
-                  className="w-full px-4 py-2 hover:bg-gray-100 dark:hover:bg-white/5 flex items-center justify-between text-right text-blue-600 font-semibold"
+                  className="w-full px-4 py-2 hover:bg-gray-100 dark:hover:bg-white/5 flex items-center justify-between text-purple-600 font-semibold"
                 >
-                  <div className="flex items-center gap-1.5">
-                    <Cpu className="w-3.5 h-3.5" />
-                    <span>مدير المهام (Task Manager)</span>
-                  </div>
+                  <span>مدير مهام المتصفح</span>
                   <span className="text-[10px] text-gray-400">Shift+Esc</span>
                 </button>
               </div>
             )}
           </div>
         </div>
-      </div>
 
-      {/* ═══════════════════════════════════════════════════════════════
-          3. شريط الإشارات المرجعية (Bookmarks Bar)
-      ═══════════════════════════════════════════════════════════════ */}
-      {showBookmarksBar && (
-        <div className="flex items-center h-7.5 px-3 bg-[#F8F9FA] dark:bg-[#202124] border-b border-[#E8EAED] dark:border-[#333539] text-xs gap-1 overflow-x-auto no-scrollbar">
-          <Folder className="w-3.5 h-3.5 text-gray-400 shrink-0 ml-1" />
-          {bookmarks.map((b) => (
-            <button
-              key={b.id}
-              type="button"
-              onClick={() => navigateCurrentTab(b.url)}
-              className="flex items-center gap-1.5 px-2 py-0.5 rounded hover:bg-black/5 dark:hover:bg-white/10 text-[#3C4043] dark:text-[#BDC1C6] text-[11px] font-medium shrink-0 transition cursor-pointer"
-            >
-              <Globe className="w-3 h-3 text-blue-500" />
-              <span>{b.title}</span>
-            </button>
-          ))}
-          <div className="flex-1" />
-          <div className="flex items-center gap-2 text-[10px] text-gray-400 shrink-0">
-            <span>قاعدة البيانات: {databaseApproved ? 'معتمدة ومتصلة ✅' : 'انقر بالأعلى للاعتماد'}</span>
-            <span>|</span>
-            <span>حماية WireGuard: 256-bit نشطة 🛡️</span>
-          </div>
-        </div>
-      )}
-
-      {/* ═══════════════════════════════════════════════════════════════
-          مساحة عرض المحتوى (Direct Web Viewport)
-      ═══════════════════════════════════════════════════════════════ */}
-      <main className="flex-1 relative bg-white dark:bg-[#1E1F22] overflow-hidden">
-        {tabs.map((tab) => {
-          const isActive = tab.id === activeTabId;
-          if (!isActive) return null;
-
-          if (tab.isCrashed) {
-            return (
-              <div
-                key={tab.id}
-                className="w-full h-full flex flex-col items-center justify-center p-6 text-center"
+        {/* شبكة التبويبات عند الضغط على مربع [1] (Tab Switcher Grid) */}
+        {isTabSwitcherOpen && (
+          <div className="p-3 bg-gray-100 dark:bg-gray-900 border-b border-gray-200 dark:border-gray-800">
+            <div className="flex items-center justify-between mb-2 text-xs font-bold">
+              <span>التبويبات المفتوحة ({tabs.length})</span>
+              <button
+                type="button"
+                onClick={() => createNewTab('https://www.google.com/search?q=songs')}
+                className="px-2.5 py-1 rounded-lg bg-blue-600 text-white flex items-center gap-1"
               >
-                <div className="w-16 h-16 rounded-2xl bg-red-100 dark:bg-red-950/40 text-red-600 flex items-center justify-center mb-4 shadow-sm">
-                  <Activity className="w-8 h-8" />
+                <Plus className="w-3.5 h-3.5" />
+                <span>تبويب جديد</span>
+              </button>
+            </div>
+            <div className="grid grid-cols-2 gap-2 max-h-48 overflow-y-auto">
+              {tabs.map((t) => (
+                <div
+                  key={t.id}
+                  onClick={() => {
+                    setActiveTabId(t.id);
+                    setIsTabSwitcherOpen(false);
+                  }}
+                  className={`p-2 rounded-xl border text-xs cursor-pointer relative transition flex flex-col justify-between ${
+                    t.id === activeTabId
+                      ? 'border-blue-500 bg-blue-50/80 dark:bg-blue-950/40'
+                      : 'border-gray-200 dark:border-gray-700 bg-white dark:bg-[#2B2D30]'
+                  }`}
+                >
+                  <div className="flex items-center justify-between mb-1">
+                    <span className="font-bold truncate text-[11px]">{t.title}</span>
+                    <button
+                      type="button"
+                      onClick={(e) => closeTab(t.id, e)}
+                      className="p-0.5 rounded-full hover:bg-black/10 text-gray-400"
+                    >
+                      <X className="w-3 h-3" />
+                    </button>
+                  </div>
+                  <span className="text-[9px] text-gray-400 font-mono truncate dir-ltr text-left">
+                    {t.url}
+                  </span>
                 </div>
-                <h2 className="text-lg font-bold mb-1">عفواً! تعطلت هذه الصفحة</h2>
-                <p className="text-xs text-gray-500 max-w-md mb-4">
-                  تم عزل هذه العملية بشكل مستقل (Process Isolation) لمنع التأثير على بقية المتصفح. يمكنك إعادة تحميلها بأمان.
-                </p>
+              ))}
+            </div>
+          </div>
+        )}
+
+        {/* ═══════════════════════════════════════════════════════════════
+            3. واجهة محرك بحث جوجل (Google SERP Engine)
+        ═══════════════════════════════════════════════════════════════ */}
+        <div className="flex-1 overflow-y-auto bg-white dark:bg-[#202124]">
+          {/* أ) رأس الصفحة (Google Header) */}
+          <div className="p-3 border-b border-gray-100 dark:border-gray-800 flex items-center justify-between">
+            {/* شعار Google بألوانه الرسمية */}
+            <div
+              onClick={() => navigateCurrentTab('https://www.google.com/search?q=songs')}
+              className="cursor-pointer select-none font-bold text-xl tracking-tight flex items-center"
+            >
+              <span className="text-[#4285F4]">G</span>
+              <span className="text-[#EA4335]">o</span>
+              <span className="text-[#FBBC05]">o</span>
+              <span className="text-[#4285F4]">g</span>
+              <span className="text-[#34A853]">l</span>
+              <span className="text-[#EA4335]">e</span>
+            </div>
+
+            <div className="flex items-center gap-3">
+              {/* أيقونة الجرس (🔔): الإشعارات */}
+              <button
+                type="button"
+                onClick={() => showToast('🔔 لا توجد إشعارات جديدة في حسابك')}
+                className="p-1.5 rounded-full hover:bg-gray-100 dark:hover:bg-white/10 text-gray-600 dark:text-gray-300 relative cursor-pointer"
+                title="إشعارات Google"
+              >
+                <Bell className="w-4 h-4" />
+                <span className="w-2 h-2 rounded-full bg-red-500 absolute top-1 right-1" />
+              </button>
+
+              {/* صورة الحساب (Avatar): إدارة حساب Google */}
+              <button
+                type="button"
+                onClick={() => setIsProfileModalOpen(true)}
+                className="w-7 h-7 rounded-full bg-blue-600 text-white flex items-center justify-center font-bold text-xs ring-2 ring-blue-300 dark:ring-blue-800 cursor-pointer"
+                title="حساب Google"
+              >
+                <span>A</span>
+              </button>
+            </div>
+          </div>
+
+          {/* ب) مربع البحث (Search Box) */}
+          <div className="p-3">
+            <form
+              onSubmit={(e) => {
+                e.preventDefault();
+                navigateCurrentTab(searchQuery);
+              }}
+              className="flex items-center h-11 px-3.5 rounded-full bg-white dark:bg-[#303134] border border-gray-200 dark:border-transparent shadow-sm hover:shadow-md focus-within:shadow-md transition gap-2"
+            >
+              <Search className="w-4 h-4 text-gray-400 shrink-0" />
+
+              <input
+                type="text"
+                value={searchQuery}
+                onChange={(e) => setSearchQuery(e.target.value)}
+                placeholder="ابحث في Google..."
+                className="flex-1 bg-transparent text-xs sm:text-sm text-[#202124] dark:text-white focus:outline-none"
+              />
+
+              {searchQuery && (
                 <button
                   type="button"
-                  onClick={reloadTab}
-                  className="px-4 py-2 rounded-xl bg-blue-600 hover:bg-blue-700 text-white font-bold text-xs flex items-center gap-1.5 shadow-md"
+                  onClick={() => setSearchQuery('')}
+                  className="p-1 text-gray-400 hover:text-gray-600"
+                  title="مسح"
                 >
-                  <RotateCw className="w-3.5 h-3.5" />
-                  <span>إعادة تحميل التبويب</span>
+                  <X className="w-3.5 h-3.5" />
                 </button>
-              </div>
-            );
-          }
+              )}
 
-          if (tab.url === 'about:blank') {
-            return (
-              <div
-                key={tab.id}
-                className="w-full h-full flex flex-col items-center justify-start overflow-y-auto px-4 py-8 max-w-4xl mx-auto"
+              {/* أيقونة الميكروفون (🎤): البحث الصوتي */}
+              <button
+                type="button"
+                onClick={handleVoiceSearch}
+                className={`p-1.5 rounded-full transition cursor-pointer ${
+                  isVoiceListening ? 'text-red-500 animate-pulse bg-red-50' : 'text-[#4285F4] hover:bg-blue-50 dark:hover:bg-white/10'
+                }`}
+                title="البحث الصوتي (Microphone)"
               >
-                {/* شعار AnwerBrowser مع حالة الأمان وقاعدة البيانات */}
-                <div className="text-center mb-6">
-                  <div className="inline-flex items-center gap-2 px-3.5 py-1.5 rounded-full bg-blue-50 dark:bg-blue-950/40 text-blue-600 text-xs font-bold mb-3 border border-blue-200 dark:border-blue-800">
-                    <Shield className="w-3.5 h-3.5 text-blue-600" />
-                    <span>محرك AnwerBrowser متعدد العمليات • نفق مشفر • تشغيل وحفظ الفيديوهات بدون نت</span>
+                <Mic className="w-4 h-4" />
+              </button>
+
+              {/* أيقونة عدسة Google (Google Lens 📷) */}
+              <button
+                type="button"
+                onClick={() => showToast('📷 عدسة Google Lens: جاري فحص الصورة المرفقة')}
+                className="p-1 text-[#EA4335] hover:bg-gray-100 dark:hover:bg-white/10 rounded-full transition cursor-pointer"
+                title="عدسة Google Lens"
+              >
+                <Camera className="w-4 h-4" />
+              </button>
+            </form>
+          </div>
+
+          {/* ج) شريط التصنيفات (أوضاع البحث - Search Modes Carousel) */}
+          <div className="px-3 border-b border-gray-200 dark:border-gray-800 flex items-center gap-2 overflow-x-auto no-scrollbar text-xs">
+            {[
+              { id: 'all', label: 'الكل', icon: <Search className="w-3.5 h-3.5" /> },
+              { id: 'ai', label: 'وضع AI', icon: <Sparkles className="w-3.5 h-3.5 text-purple-600" />, badge: 'جديد' },
+              { id: 'videos', label: 'فيديوهات', icon: <Film className="w-3.5 h-3.5 text-rose-500" /> },
+              { id: 'images', label: 'صور', icon: <Image className="w-3.5 h-3.5 text-blue-500" /> },
+              { id: 'shorts', label: 'فيديوهات قصيرة', icon: <Play className="w-3.5 h-3.5 text-red-500" /> },
+              { id: 'news', label: 'أخبار', icon: <Globe className="w-3.5 h-3.5 text-emerald-500" /> },
+              { id: 'apps', label: 'تطبيقات', icon: <Smartphone className="w-3.5 h-3.5 text-indigo-500" /> },
+              { id: 'books', label: 'كتب', icon: <Folder className="w-3.5 h-3.5 text-amber-500" /> },
+              { id: 'pdf', label: 'PDF', icon: <Terminal className="w-3.5 h-3.5 text-gray-500" /> },
+            ].map((mode) => (
+              <button
+                key={mode.id}
+                type="button"
+                onClick={() => setActiveSearchMode(mode.id as any)}
+                className={`py-2 px-3 border-b-2 font-semibold transition shrink-0 flex items-center gap-1.5 cursor-pointer ${
+                  activeSearchMode === mode.id
+                    ? 'border-blue-600 text-blue-600 font-bold'
+                    : 'border-transparent text-gray-600 dark:text-gray-400 hover:text-black dark:hover:text-white'
+                }`}
+              >
+                {mode.icon}
+                <span>{mode.label}</span>
+                {mode.badge && (
+                  <span className="px-1 py-0.2 rounded-full bg-purple-100 text-purple-700 text-[9px] font-bold">
+                    {mode.badge}
+                  </span>
+                )}
+              </button>
+            ))}
+          </div>
+
+          {/* د) محتوى الصفحة (النتائج المتخصصة والذكية) */}
+          <div className="p-3 space-y-4">
+            {/* 1. نظرة عامة بالذكاء الاصطناعي (AI Overview - Gemini Card) */}
+            {(activeSearchMode === 'all' || activeSearchMode === 'ai') && (
+              <div className="p-3.5 rounded-2xl bg-gradient-to-br from-purple-50/80 to-blue-50/80 dark:from-purple-950/20 dark:to-blue-950/20 border border-purple-200 dark:border-purple-800 shadow-xs">
+                <div className="flex items-center justify-between mb-2">
+                  <div className="flex items-center gap-2">
+                    <div className="w-6 h-6 rounded-lg bg-gradient-to-tr from-purple-600 to-blue-500 flex items-center justify-center text-white">
+                      <Sparkles className="w-3.5 h-3.5" />
+                    </div>
+                    <span className="font-bold text-xs text-purple-900 dark:text-purple-300">
+                      نظرة عامة مدعومة بالذكاء الاصطناعي (AI Overview)
+                    </span>
                   </div>
-                  <h1 className="text-3xl sm:text-4xl font-extrabold tracking-tight">
-                    Anwer<span className="text-blue-600">Browser</span>
-                  </h1>
-                  <p className="text-xs text-gray-500 mt-1">
-                    تصفح فوري عالي السرعة، تشغيل وحفظ الفيديوهات للمشاهدة بدون إنترنت، وحماية قصوى
-                  </p>
+                  <button
+                    type="button"
+                    onClick={() => setIsAiOverviewExpanded((p) => !p)}
+                    className="text-[11px] text-purple-700 dark:text-purple-400 font-bold"
+                  >
+                    {isAiOverviewExpanded ? 'تصغير' : 'عرض'}
+                  </button>
                 </div>
 
-                {/* شريط البحث المباشر في الصفحة الرئيسية */}
-                <form
-                  onSubmit={(e) => {
-                    e.preventDefault();
-                    if (searchQuery.trim()) navigateCurrentTab(searchQuery);
-                  }}
-                  className="w-full max-w-xl mb-6 relative"
-                >
-                  <div className="flex items-center h-12 px-4 rounded-2xl bg-[#F1F3F4] dark:bg-[#2B2D30] hover:shadow-md focus-within:shadow-md focus-within:bg-white dark:focus-within:bg-[#202124] border border-transparent focus-within:border-blue-500 transition">
-                    <Search className="w-5 h-5 text-gray-400 shrink-0 ml-2" />
-                    <input
-                      type="text"
-                      value={searchQuery}
-                      onChange={(e) => setSearchQuery(e.target.value)}
-                      placeholder="ابحث في Google أو اكتب عنوان موقع أو فيديو مباشر..."
-                      className="flex-1 bg-transparent text-sm text-[#202124] dark:text-[#E8EAED] focus:outline-none"
-                    />
-                    <button
-                      type="submit"
-                      className="px-3 py-1 rounded-xl bg-blue-600 hover:bg-blue-700 text-white font-bold text-xs"
-                    >
-                      بحث
-                    </button>
+                {isAiOverviewExpanded && (
+                  <div className="text-xs text-gray-700 dark:text-gray-300 space-y-2 leading-relaxed">
+                    <p>
+                      نتائج البحث عن <strong>&ldquo;{currentSearchTerm}&rdquo;</strong> تُظهر مزيجاً من أشهر الأغاني الكلاسيكية والحديثة عبر مختلف المنصات (Spotify و YouTube و Apple Music).
+                    </p>
+                    <ul className="list-disc list-inside space-y-1 text-[11px] text-gray-600 dark:text-gray-400">
+                      <li>الأغاني الأكثر استماعاً حالياً: Lewis Capaldi، Harry Styles، The Weeknd.</li>
+                      <li>تتوفر التطبيقات المخصصة للاستماع المباشر في قسم التطبيقات أدناه.</li>
+                      <li>يمكنك تشغيل أي فيديو مباشرة داخل المتصفح وحفظه لمشاهدته بدون إنترنت.</li>
+                    </ul>
                   </div>
-                </form>
+                )}
+              </div>
+            )}
 
-                {/* 🎬 قسم تشغيل وحفظ الفيديوهات للمشاهدة بدون إنترنت */}
-                <div className="w-full max-w-3xl mb-8 p-4 rounded-2xl bg-gradient-to-br from-rose-50/70 to-orange-50/70 dark:from-rose-950/20 dark:to-orange-950/20 border border-rose-200 dark:border-rose-900/40 shadow-xs">
-                  <div className="flex items-center justify-between mb-3">
-                    <div className="flex items-center gap-2">
-                      <Film className="w-5 h-5 text-rose-600" />
-                      <div>
-                        <h3 className="font-bold text-sm text-gray-900 dark:text-white">
-                          مكتبة الفيديوهات وتشغيل بدون إنترنت (Offline Videos)
-                        </h3>
-                        <p className="text-[11px] text-gray-500">
-                          شغّل أي فيديو وسيتم حفظه في السجلات فورياً لمشاهدته عند انقطاع النت
-                        </p>
-                      </div>
-                    </div>
-                    <button
-                      type="button"
-                      onClick={() => setIsOfflineVideosDrawerOpen(true)}
-                      className="px-3 py-1.5 rounded-xl bg-rose-600 hover:bg-rose-700 text-white text-xs font-bold transition flex items-center gap-1.5 cursor-pointer shadow-xs"
-                    >
-                      <span>عرض الكل ({videoWatchHistory.length})</span>
-                    </button>
+            {/* 2. قسم الفيديوهات (Videos Section) */}
+            {(activeSearchMode === 'all' || activeSearchMode === 'videos') && (
+              <div className="space-y-2.5">
+                <div className="flex items-center justify-between">
+                  <div className="flex items-center gap-2">
+                    <Film className="w-4 h-4 text-rose-600" />
+                    <h3 className="font-bold text-sm text-gray-900 dark:text-white">فيديوهات</h3>
                   </div>
+                  <button
+                    type="button"
+                    onClick={() => showToast('خيارات قسم الفيديوهات')}
+                    className="p-1 text-gray-400 hover:text-gray-600"
+                  >
+                    <MoreVertical className="w-4 h-4" />
+                  </button>
+                </div>
 
-                  {/* تشغيل رابط فيديو مخصص */}
-                  <form onSubmit={handlePlayCustomVideo} className="flex gap-2 mb-4">
-                    <input
-                      type="text"
-                      value={customVideoUrlInput}
-                      onChange={(e) => setCustomVideoUrlInput(e.target.value)}
-                      placeholder="أدخل رابط فيديو مباشر (MP4 / WebM / Stream URL) لتشغيله وحفظه..."
-                      className="flex-1 px-3 py-2 text-xs rounded-xl border border-rose-200 dark:border-rose-900/60 bg-white dark:bg-[#202124] focus:outline-none focus:border-rose-500 dir-ltr text-left font-mono"
-                    />
-                    <button
-                      type="submit"
-                      className="px-4 py-2 rounded-xl bg-rose-600 hover:bg-rose-700 text-white font-bold text-xs flex items-center gap-1 shrink-0 cursor-pointer"
+                {/* بطاقات الفيديوهات (Video Cards) */}
+                <div className="space-y-3">
+                  {SAMPLE_VIDEOS.slice(0, moreVideosCount).map((vid) => (
+                    <div
+                      key={vid.id}
+                      onClick={() => handlePlayVideo(vid)}
+                      className="p-2.5 rounded-2xl border border-gray-200 dark:border-gray-700 hover:border-blue-500 hover:shadow-md transition cursor-pointer flex gap-3 group bg-white dark:bg-[#2B2D30]"
                     >
-                      <Play className="w-3.5 h-3.5 fill-current" />
-                      <span>تشغيل وحفظ</span>
-                    </button>
-                  </form>
-
-                  {/* بطاقات الفيديوهات الجاهزة للمشاهدة بدون إنترنت */}
-                  <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3">
-                    {SAMPLE_VIDEOS.map((vid) => (
-                      <div
-                        key={vid.id}
-                        onClick={() => handlePlayVideo(vid)}
-                        className="group relative rounded-xl overflow-hidden border border-rose-100 dark:border-rose-900/30 bg-white dark:bg-[#202124] shadow-xs hover:shadow-md cursor-pointer transition flex flex-col"
-                      >
-                        <div className="relative aspect-video bg-black overflow-hidden">
-                          <img
-                            src={vid.thumbnail}
-                            alt={vid.title}
-                            className="w-full h-full object-cover group-hover:scale-105 transition duration-300"
-                          />
-                          <div className="absolute inset-0 bg-black/30 group-hover:bg-black/10 transition flex items-center justify-center">
-                            <div className="w-9 h-9 rounded-full bg-rose-600/90 text-white flex items-center justify-center shadow-lg group-hover:scale-110 transition">
-                              <Play className="w-4 h-4 fill-current ml-0.5" />
-                            </div>
+                      {/* الصورة المصغرة (Thumbnail) ومدة الفيديو وزر التشغيل */}
+                      <div className="relative w-32 h-20 rounded-xl overflow-hidden bg-black shrink-0">
+                        <img
+                          src={vid.thumbnail}
+                          alt={vid.title}
+                          className="w-full h-full object-cover group-hover:scale-105 transition"
+                        />
+                        <div className="absolute inset-0 bg-black/25 flex items-center justify-center">
+                          <div className="w-8 h-8 rounded-full bg-white/90 text-red-600 flex items-center justify-center shadow-lg group-hover:scale-110 transition">
+                            <Play className="w-4 h-4 fill-current ml-0.5" />
                           </div>
-                          <span className="absolute bottom-1.5 left-1.5 px-1.5 py-0.5 rounded bg-black/75 text-white font-mono text-[9px]">
-                            {vid.duration}
-                          </span>
-                          <span className="absolute top-1.5 right-1.5 px-1.5 py-0.5 rounded bg-emerald-600 text-white font-bold text-[9px] flex items-center gap-0.5 shadow-xs">
-                            <CheckCircle2 className="w-2.5 h-2.5" />
-                            <span>بدون نت</span>
-                          </span>
                         </div>
-                        <div className="p-2.5 flex-1 flex flex-col justify-between">
-                          <h4 className="font-bold text-[11px] line-clamp-2 text-gray-900 dark:text-gray-100 group-hover:text-rose-600 transition">
+                        <span className="absolute bottom-1 left-1 px-1.5 py-0.2 rounded bg-black/80 text-white font-mono text-[9px]">
+                          {vid.duration}
+                        </span>
+                      </div>
+
+                      {/* تفاصيل الفيديو: العنوان، القناة، التاريخ */}
+                      <div className="flex-1 flex flex-col justify-between truncate">
+                        <div>
+                          <h4 className="font-bold text-xs text-gray-900 dark:text-white line-clamp-2 group-hover:text-blue-600 transition">
                             {vid.title}
                           </h4>
-                          <div className="mt-2 flex items-center justify-between text-[10px] text-gray-400">
-                            <span>{vid.playedAt}</span>
-                            <span className="text-emerald-600 font-semibold">محفوظ 💾</span>
-                          </div>
+                          <p className="text-[11px] text-gray-500 mt-0.5">
+                            {vid.channel || 'YouTube'}
+                          </p>
+                        </div>
+                        <div className="flex items-center justify-between text-[10px] text-gray-400">
+                          <span>{vid.playedAt}</span>
+                          <span className="text-emerald-600 font-bold flex items-center gap-0.5">
+                            <CheckCircle2 className="w-2.5 h-2.5" />
+                            تشغيل وحفظ أوفلاين
+                          </span>
                         </div>
                       </div>
-                    ))}
-                  </div>
-                </div>
-
-                {/* شبكة المواقع الشائعة والمختصرات */}
-                <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 w-full max-w-xl mb-8">
-                  {[
-                    { title: 'Google', url: 'https://www.google.com', color: 'bg-blue-500' },
-                    { title: 'ويكيبيديا', url: 'https://ar.wikipedia.org', color: 'bg-gray-700' },
-                    { title: 'أخبار BBC', url: 'https://www.bbc.com/arabic', color: 'bg-red-600' },
-                    { title: 'GitHub', url: 'https://github.com', color: 'bg-gray-900' },
-                    { title: 'Hacker News', url: 'https://news.ycombinator.com', color: 'bg-orange-500' },
-                    { title: 'YouTube', url: 'https://www.youtube.com', color: 'bg-red-500' },
-                    { title: 'Reddit', url: 'https://www.reddit.com', color: 'bg-orange-600' },
-                    { title: 'Stack Overflow', url: 'https://stackoverflow.com', color: 'bg-amber-600' },
-                  ].map((site, i) => (
-                    <button
-                      key={i}
-                      type="button"
-                      onClick={() => navigateCurrentTab(site.url)}
-                      className="p-3.5 rounded-2xl bg-[#F8F9FA] dark:bg-[#2B2D30] hover:bg-[#E8EAED] dark:hover:bg-[#333539] border border-gray-200 dark:border-gray-700 flex flex-col items-center justify-center gap-2 transition cursor-pointer group shadow-2xs"
-                    >
-                      <div
-                        className={`w-9 h-9 rounded-xl ${site.color} text-white flex items-center justify-center font-bold text-sm shadow-xs group-hover:scale-105 transition`}
-                      >
-                        {site.title.charAt(0)}
-                      </div>
-                      <span className="text-xs font-semibold text-gray-800 dark:text-gray-200 truncate max-w-[100px]">
-                        {site.title}
-                      </span>
-                    </button>
+                    </div>
                   ))}
                 </div>
 
-                {/* بطاقات ميزات المتصفح */}
-                <div className="grid grid-cols-1 md:grid-cols-3 gap-3 w-full max-w-3xl text-right">
-                  <div className="p-3.5 rounded-2xl border border-gray-200 dark:border-gray-700 bg-white dark:bg-[#2B2D30]">
-                    <div className="flex items-center gap-2 font-bold text-xs mb-1 text-rose-600">
-                      <Film className="w-4 h-4" />
-                      <span>تشغيل ومشاهدة بدون نت</span>
-                    </div>
-                    <p className="text-[11px] text-gray-500">
-                      أي فيديو تشغله يتم تخزينه في الذاكرة لتستطيع العودة إليه ومشاهدته بطلاقة حتى عند انقطاع الإنترنت.
-                    </p>
-                  </div>
-
-                  <div className="p-3.5 rounded-2xl border border-gray-200 dark:border-gray-700 bg-white dark:bg-[#2B2D30]">
-                    <div className="flex items-center gap-2 font-bold text-xs mb-1 text-blue-600">
-                      <Database className="w-4 h-4" />
-                      <span>قاعدة بيانات التخزين الدائم</span>
-                    </div>
-                    <p className="text-[11px] text-gray-500">
-                      تخزين محلي وسحابي معتمد ومشفر (Firestore + IndexedDB) لحفظ الفيديوهات وسجل التصفح بشكل موثوق.
-                    </p>
-                  </div>
-
-                  <div className="p-3.5 rounded-2xl border border-gray-200 dark:border-gray-700 bg-white dark:bg-[#2B2D30]">
-                    <div className="flex items-center gap-2 font-bold text-xs mb-1 text-emerald-600">
-                      <Shield className="w-4 h-4" />
-                      <span>Free VPN دائم في الخلفية</span>
-                    </div>
-                    <p className="text-[11px] text-gray-500">
-                      تشفير تلقائي وثابت يمنع تتبع أبحاثك وكلماتك مع نفق WireGuard عالي السرعة وبدون سجلات.
-                    </p>
-                  </div>
-                </div>
+                {/* زر "المزيد من الفيديوهات" (Lazy Loading) */}
+                <button
+                  type="button"
+                  onClick={() => {
+                    setMoreVideosCount((c) => Math.min(SAMPLE_VIDEOS.length, c + 2));
+                    showToast('تم تحميل المزيد من الفيديوهات');
+                  }}
+                  className="w-full py-2.5 rounded-xl border border-gray-200 dark:border-gray-700 bg-gray-50 dark:bg-white/5 hover:bg-gray-100 text-xs font-bold text-blue-600 transition"
+                >
+                  المزيد من الفيديوهات ⬇️
+                </button>
               </div>
-            );
-          }
+            )}
 
-          // عرض صفحة الويب الفعلية عبر محرك المتصفح المباشر
-          return (
-            <div key={tab.id} className="w-full h-full relative">
-              {tab.loading && (
-                <div className="absolute top-0 left-0 right-0 h-1 bg-blue-100 overflow-hidden z-20">
-                  <div className="h-full bg-blue-600 animate-pulse w-full" />
+            {/* 3. قسم التطبيقات (Apps Section - Google Play Store) */}
+            {(activeSearchMode === 'all' || activeSearchMode === 'apps') && (
+              <div className="space-y-2.5 p-3 rounded-2xl bg-gray-50 dark:bg-white/5 border border-gray-200 dark:border-gray-700">
+                <div className="flex items-center justify-between">
+                  <div className="flex items-center gap-2">
+                    <Smartphone className="w-4 h-4 text-indigo-600" />
+                    <h3 className="font-bold text-sm text-gray-900 dark:text-white">تطبيقات (Apps)</h3>
+                  </div>
+                  <span className="text-[10px] text-gray-400">متجر Google Play</span>
                 </div>
-              )}
-              <iframe
-                title={tab.title}
-                src={tab.url}
-                className="w-full h-full border-none"
-                sandbox="allow-same-origin allow-scripts allow-forms allow-popups allow-downloads allow-modals"
-                style={{
-                  transform: `scale(${zoomLevel / 100})`,
-                  transformOrigin: 'top right',
-                  width: `${100 / (zoomLevel / 100)}%`,
-                  height: `${100 / (zoomLevel / 100)}%`,
-                }}
-                onLoad={() => {
-                  setTabs((prev) =>
-                    prev.map((t) => (t.id === tab.id ? { ...t, loading: false } : t))
-                  );
-                }}
-              />
+
+                <div className="grid grid-cols-1 sm:grid-cols-3 gap-2.5">
+                  {[
+                    {
+                      name: 'Shazam: Music Discovery',
+                      desc: 'التعرف على الأغاني والموسيقى',
+                      rating: '4.6',
+                      reviews: '12,230,126',
+                      icon: 'https://images.unsplash.com/photo-1511671782779-c97d3d27a1d4?w=100&q=80',
+                    },
+                    {
+                      name: 'Spotify: Music and Podcasts',
+                      desc: 'استماع وتحميل الأغاني',
+                      rating: '4.5',
+                      reviews: '31,450,890',
+                      icon: 'https://images.unsplash.com/photo-1614680376593-902f749f7ffc?w=100&q=80',
+                    },
+                    {
+                      name: 'YouTube Music',
+                      desc: 'بث الموسيقى والفيديوهات الرسمية',
+                      rating: '4.4',
+                      reviews: '8,920,410',
+                      icon: 'https://images.unsplash.com/photo-1611162617213-7d7a39e9b1d7?w=100&q=80',
+                    },
+                  ].slice(0, moreAppsCount).map((app, i) => (
+                    <div
+                      key={i}
+                      className="p-2.5 rounded-xl border border-gray-200 dark:border-gray-700 bg-white dark:bg-[#202124] flex items-center justify-between gap-2 shadow-2xs"
+                    >
+                      <div className="flex items-center gap-2.5 truncate">
+                        <img
+                          src={app.icon}
+                          alt={app.name}
+                          className="w-10 h-10 rounded-xl object-cover shrink-0"
+                        />
+                        <div className="truncate">
+                          <h4 className="font-bold text-xs truncate text-gray-900 dark:text-white">
+                            {app.name}
+                          </h4>
+                          <div className="flex items-center gap-1 text-[10px] text-gray-500">
+                            <span className="text-amber-500 font-bold flex items-center">
+                              ⭐ {app.rating}
+                            </span>
+                            <span>•</span>
+                            <span>{app.reviews}</span>
+                          </div>
+                        </div>
+                      </div>
+                      <button
+                        type="button"
+                        onClick={() => showToast(`تم تثبيت ${app.name} عبر AnwerBrowser`)}
+                        className="px-3 py-1 rounded-full bg-blue-600 hover:bg-blue-700 text-white font-bold text-xs shrink-0 cursor-pointer"
+                      >
+                        تثبيت
+                      </button>
+                    </div>
+                  ))}
+                </div>
+
+                <button
+                  type="button"
+                  onClick={() => showToast('عرض المزيد من تطبيقات الموسيقى')}
+                  className="w-full py-2 rounded-xl text-center text-xs font-semibold text-blue-600 hover:underline"
+                >
+                  المزيد من التطبيقات ⬇️
+                </button>
+              </div>
+            )}
+
+            {/* 4. نتائج الويب العضوية (Web Results) */}
+            {(activeSearchMode === 'all' || activeSearchMode === 'news') && (
+              <div className="space-y-4">
+                {[
+                  {
+                    domain: 'open.spotify.com',
+                    path: 'playlist > best-songs',
+                    title: 'THE BEST SONGS OF ALL TIME - Spotify Playlist',
+                    snippet:
+                      'استمع إلى أشهر الأغاني عبر التاريخ في قائمة التشغيل الرسمية. تتضمن أغاني البوب، الروك، والأغاني الهادئة الأكثر تشغيلاً عالمياً.',
+                  },
+                  {
+                    domain: 'en.wikipedia.org',
+                    path: 'wiki > List_of_best-selling_singles',
+                    title: 'List of best-selling singles and greatest songs - Wikipedia',
+                    snippet:
+                      'قائمة بالأغاني الأكثر مبيعاً والأعلى استماعاً عالمياً عبر كل العصور، مع تفاصيل الإصدارات والشهادات الموسيقية.',
+                  },
+                  {
+                    domain: 'billboard.com',
+                    path: 'charts > hot-100',
+                    title: 'Billboard Hot 100™ - Top 100 Songs Chart of the Week',
+                    snippet:
+                      'قائمة بيلبورد هوت 100 الأسبوعية لأفضل وأشهر 100 أغنية في العالم مع نسب البث المباشر والمبيعات الرقمية.',
+                  },
+                ].map((item, idx) => (
+                  <div
+                    key={idx}
+                    onClick={() => navigateCurrentTab(`https://${item.domain}`)}
+                    className="p-3 rounded-2xl border border-gray-100 dark:border-gray-800 hover:border-blue-400 dark:hover:border-blue-600 transition cursor-pointer group bg-white dark:bg-[#202124]"
+                  >
+                    <div className="flex items-center gap-2 text-[11px] text-gray-500 mb-1">
+                      <div className="w-4 h-4 rounded-full bg-gray-200 dark:bg-gray-700 flex items-center justify-center font-bold text-[9px]">
+                        🌐
+                      </div>
+                      <span className="font-mono text-gray-700 dark:text-gray-300 font-semibold">
+                        {item.domain}
+                      </span>
+                      <span>›</span>
+                      <span className="text-gray-400 truncate">{item.path}</span>
+                    </div>
+
+                    <h4 className="text-sm font-bold text-blue-700 dark:text-blue-400 group-hover:underline mb-1">
+                      {item.title}
+                    </h4>
+
+                    <p className="text-xs text-gray-600 dark:text-gray-400 leading-relaxed">
+                      {item.snippet}
+                    </p>
+                  </div>
+                ))}
+              </div>
+            )}
+
+            {/* 5. قسم "تم البحث أيضًا عن" (Related Searches) */}
+            <div className="p-3.5 rounded-2xl bg-gray-50 dark:bg-white/5 border border-gray-200 dark:border-gray-700 space-y-2">
+              <h3 className="font-bold text-xs text-gray-700 dark:text-gray-300">
+                تم البحث أيضًا عن (Related Searches)
+              </h3>
+              <div className="flex flex-wrap gap-2">
+                {[
+                  'A lot of songs',
+                  'Songs English',
+                  'Songs popular 2026',
+                  'أغاني حماسية جديدة',
+                  'Best acoustic songs',
+                  'Songs top 50 global',
+                ].map((term, i) => (
+                  <button
+                    key={i}
+                    type="button"
+                    onClick={() => {
+                      setSearchQuery(term);
+                      navigateCurrentTab(term);
+                    }}
+                    className="px-3 py-1.5 rounded-full bg-white dark:bg-[#2B2D30] border border-gray-200 dark:border-gray-700 text-xs font-semibold hover:border-blue-500 hover:text-blue-600 transition cursor-pointer flex items-center gap-1.5 shadow-2xs"
+                  >
+                    <Search className="w-3 h-3 text-gray-400" />
+                    <span>{term}</span>
+                  </button>
+                ))}
+              </div>
             </div>
-          );
-        })}
-      </main>
+          </div>
+        </div>
+      </div>
 
       {/* ═══════════════════════════════════════════════════════════════
-          4. نافذة مشغل الفيديو المدمج (Video Player Modal)
+          مشغل الفيديو المدمج (Video Player Modal)
           تشغيل الفيديو مع حفظه تلقائياً في السجل للمشاهدة بدون إنترنت
       ═══════════════════════════════════════════════════════════════ */}
       {isVideoPlayerOpen && currentPlayingVideo && (
@@ -1469,7 +1512,6 @@ export default function App() {
               </button>
             </div>
 
-            {/* عنصر الفيديو الفعلي */}
             <div className="relative aspect-video bg-black flex items-center justify-center">
               <video
                 ref={videoPlayerRef}
@@ -1481,7 +1523,6 @@ export default function App() {
               />
             </div>
 
-            {/* شريط أدوات وحالة الفيديو والتخزين */}
             <div className="p-4 bg-[#242526] flex flex-wrap items-center justify-between gap-3 text-xs">
               <div className="flex items-center gap-2">
                 <span className="w-2.5 h-2.5 rounded-full bg-emerald-500 animate-pulse" />
@@ -1489,7 +1530,6 @@ export default function App() {
                 <span className="text-gray-400 text-[11px] font-mono">({currentPlayingVideo.duration})</span>
               </div>
 
-              {/* التحكم في سرعة التشغيل */}
               <div className="flex items-center gap-1 text-[11px]">
                 <span className="text-gray-400 ml-1">السرعة:</span>
                 {[0.75, 1, 1.25, 1.5, 2].map((rate) => (
@@ -1508,26 +1548,24 @@ export default function App() {
                 ))}
               </div>
 
-              <div className="flex items-center gap-2">
-                <button
-                  type="button"
-                  onClick={() => {
-                    setIsOfflineVideosDrawerOpen(true);
-                    setIsVideoPlayerOpen(false);
-                  }}
-                  className="px-3 py-1.5 rounded-lg bg-white/10 hover:bg-white/20 text-xs font-semibold flex items-center gap-1.5"
-                >
-                  <Film className="w-3.5 h-3.5 text-rose-400" />
-                  <span>فتح مكتبة الفيديوهات المحفوظة</span>
-                </button>
-              </div>
+              <button
+                type="button"
+                onClick={() => {
+                  setIsOfflineVideosDrawerOpen(true);
+                  setIsVideoPlayerOpen(false);
+                }}
+                className="px-3 py-1.5 rounded-lg bg-white/10 hover:bg-white/20 text-xs font-semibold flex items-center gap-1.5"
+              >
+                <Film className="w-3.5 h-3.5 text-rose-400" />
+                <span>مكتبة الفيديوهات المحفوظة</span>
+              </button>
             </div>
           </div>
         </div>
       )}
 
       {/* ═══════════════════════════════════════════════════════════════
-          5. درج مكتبة الفيديوهات المحفوظة للمشاهدة بدون نت (Offline Videos Library)
+          درج مكتبة الفيديوهات المحفوظة للمشاهدة بدون نت
       ═══════════════════════════════════════════════════════════════ */}
       {isOfflineVideosDrawerOpen && (
         <div
@@ -1569,88 +1607,62 @@ export default function App() {
               </div>
             </div>
 
-            <div className="p-3 bg-gray-50 dark:bg-white/5 border-b border-gray-200 dark:border-gray-700 flex items-center justify-between text-xs">
-              <div className="flex items-center gap-1.5 text-emerald-600 font-semibold text-[11px]">
-                <CheckCircle2 className="w-4 h-4" />
-                <span>حفظ محلي في IndexedDB + قاعدة البيانات</span>
-              </div>
-              <button
-                type="button"
-                onClick={() => setIsDbApprovalModalOpen(true)}
-                className="text-[11px] text-blue-600 hover:underline font-bold"
-              >
-                إدارة قاعدة البيانات
-              </button>
-            </div>
-
             <div className="flex-1 overflow-y-auto p-3 space-y-3">
-              {videoWatchHistory.length === 0 ? (
-                <div className="text-center py-16 text-gray-400 text-xs flex flex-col items-center">
-                  <Film className="w-10 h-10 text-gray-300 dark:text-gray-600 mb-2" />
-                  <p className="font-semibold text-gray-600 dark:text-gray-300">
-                    لا توجد فيديوهات محفوظة بعد
-                  </p>
-                  <p className="text-[11px] text-gray-400 mt-1 max-w-xs">
-                    أي فيديو تقوم بتشغيله في المتصفح سيُحفظ هنا تلقائياً لتشاهده بدون نت في أي وقت.
-                  </p>
-                </div>
-              ) : (
-                videoWatchHistory.map((vid) => (
-                  <div
-                    key={vid.id}
-                    onClick={() => {
-                      handlePlayVideo(vid);
-                      setIsOfflineVideosDrawerOpen(false);
-                    }}
-                    className="p-2.5 rounded-2xl border border-gray-200 dark:border-gray-700/60 hover:border-rose-500 hover:bg-rose-50/20 dark:hover:bg-rose-950/10 cursor-pointer transition flex gap-3 group relative"
-                  >
-                    <div className="relative w-28 h-18 rounded-xl overflow-hidden bg-black shrink-0">
-                      <img
-                        src={vid.thumbnail}
-                        alt={vid.title}
-                        className="w-full h-full object-cover group-hover:scale-105 transition"
-                      />
-                      <div className="absolute inset-0 bg-black/25 flex items-center justify-center">
-                        <Play className="w-5 h-5 text-white fill-current" />
+              {videoWatchHistory.map((vid) => (
+                <div
+                  key={vid.id}
+                  onClick={() => {
+                    handlePlayVideo(vid);
+                    setIsOfflineVideosDrawerOpen(false);
+                  }}
+                  className="p-2.5 rounded-2xl border border-gray-200 dark:border-gray-700/60 hover:border-rose-500 hover:bg-rose-50/20 dark:hover:bg-rose-950/10 cursor-pointer transition flex gap-3 group relative"
+                >
+                  <div className="relative w-28 h-18 rounded-xl overflow-hidden bg-black shrink-0">
+                    <img
+                      src={vid.thumbnail}
+                      alt={vid.title}
+                      className="w-full h-full object-cover group-hover:scale-105 transition"
+                    />
+                    <div className="absolute inset-0 bg-black/25 flex items-center justify-center">
+                      <Play className="w-5 h-5 text-white fill-current" />
+                    </div>
+                    <span className="absolute bottom-1 left-1 bg-black/80 text-white text-[9px] px-1 py-0.2 rounded font-mono">
+                      {vid.duration}
+                    </span>
+                  </div>
+
+                  <div className="flex-1 flex flex-col justify-between truncate">
+                    <div>
+                      <h4 className="font-bold text-xs truncate text-gray-900 dark:text-white group-hover:text-rose-600 transition">
+                        {vid.title}
+                      </h4>
+                      <div className="text-[10px] text-emerald-600 font-semibold flex items-center gap-1 mt-1">
+                        <CheckCircle2 className="w-3 h-3" />
+                        <span>جاهز للمشاهدة بدون إنترنت</span>
                       </div>
-                      <span className="absolute bottom-1 left-1 bg-black/80 text-white text-[9px] px-1 py-0.2 rounded font-mono">
-                        {vid.duration}
-                      </span>
                     </div>
 
-                    <div className="flex-1 flex flex-col justify-between truncate">
-                      <div>
-                        <h4 className="font-bold text-xs truncate text-gray-900 dark:text-white group-hover:text-rose-600 transition">
-                          {vid.title}
-                        </h4>
-                        <div className="text-[10px] text-emerald-600 font-semibold flex items-center gap-1 mt-1">
-                          <CheckCircle2 className="w-3 h-3" />
-                          <span>جاهز للمشاهدة بدون إنترنت</span>
-                        </div>
-                      </div>
-
-                      <div className="flex items-center justify-between text-[10px] text-gray-400 mt-1">
-                        <span>{vid.playedAt}</span>
-                        <button
-                          type="button"
-                          onClick={(e) => handleDeleteVideoRecord(vid.id, e)}
-                          className="opacity-0 group-hover:opacity-100 p-1 text-gray-400 hover:text-red-500 rounded-md hover:bg-black/5 dark:hover:bg-white/10"
-                          title="حذف من السجل"
-                        >
-                          <Trash2 className="w-3.5 h-3.5" />
-                        </button>
-                      </div>
+                    <div className="flex items-center justify-between text-[10px] text-gray-400 mt-1">
+                      <span>{vid.playedAt}</span>
+                      <button
+                        type="button"
+                        onClick={(e) => handleDeleteVideoRecord(vid.id, e)}
+                        className="opacity-0 group-hover:opacity-100 p-1 text-gray-400 hover:text-red-500 rounded-md"
+                        title="حذف من السجل"
+                      >
+                        <Trash2 className="w-3.5 h-3.5" />
+                      </button>
                     </div>
                   </div>
-                ))
-              )}
+                </div>
+              ))}
             </div>
           </div>
         </div>
       )}
 
       {/* ═══════════════════════════════════════════════════════════════
-          6. نافذة الموافقة واعتماد قاعدة البيانات (Database Storage Approval Modal)
+          نافذة الموافقة واعتماد قاعدة البيانات للتخزين
       ═══════════════════════════════════════════════════════════════ */}
       {isDbApprovalModalOpen && (
         <div
@@ -1659,7 +1671,7 @@ export default function App() {
         >
           <div
             onClick={(e) => e.stopPropagation()}
-            className="w-full max-w-lg bg-white dark:bg-[#2B2D30] rounded-2xl shadow-2xl border border-gray-200 dark:border-gray-700 overflow-hidden flex flex-col"
+            className="w-full max-w-lg bg-white dark:bg-[#2B2D30] rounded-2xl shadow-2xl border border-gray-200 dark:border-gray-700 overflow-hidden flex flex-col text-right"
           >
             <div className="p-5 border-b border-gray-200 dark:border-gray-700 bg-blue-50/60 dark:bg-blue-950/20 flex items-center justify-between">
               <div className="flex items-center gap-3">
@@ -1678,7 +1690,7 @@ export default function App() {
               <button
                 type="button"
                 onClick={() => setIsDbApprovalModalOpen(false)}
-                className="p-1.5 rounded-full hover:bg-black/10 dark:hover:bg-white/10 text-gray-400"
+                className="p-1.5 rounded-full hover:bg-black/10 text-gray-400"
               >
                 <X className="w-5 h-5" />
               </button>
@@ -1704,11 +1716,6 @@ export default function App() {
                   <span className="text-[11px] text-emerald-600 font-semibold">مشفّر 256-bit آمن</span>
                 </div>
               </div>
-
-              <div className="flex items-center gap-2 text-[11px] text-gray-500">
-                <CheckCircle2 className="w-4 h-4 text-emerald-600 shrink-0" />
-                <span>الموافقة تمنح المتصفح صلاحية استخدام قاعدة البيانات للحفظ الدائم وتجاوز حدود الذاكرة المؤقتة.</span>
-              </div>
             </div>
 
             <div className="p-4 bg-gray-50 dark:bg-white/5 border-t border-gray-200 dark:border-gray-700 flex items-center justify-between gap-3">
@@ -1732,9 +1739,7 @@ export default function App() {
         </div>
       )}
 
-      {/* ═══════════════════════════════════════════════════════════════
-          7. درج السجل والتصفية (History Drawer)
-      ═══════════════════════════════════════════════════════════════ */}
+      {/* درج السجل والتصفية */}
       {isHistoryDrawerOpen && (
         <div
           className="fixed inset-0 z-50 bg-black/40 backdrop-blur-2xs flex justify-end"
@@ -1748,7 +1753,7 @@ export default function App() {
               <div className="flex items-center gap-2">
                 <History className="w-5 h-5 text-blue-600" />
                 <h3 className="font-bold text-sm text-gray-900 dark:text-white">
-                  سجل التصفح ({filteredHistory.length})
+                  سجل التصفح والبحث ({filteredHistory.length})
                 </h3>
               </div>
               <div className="flex items-center gap-1.5">
@@ -1782,15 +1787,6 @@ export default function App() {
                   placeholder="ابحث في السجل بالاسم، الرابط، أو الكلمة..."
                   className="w-full pr-9 pl-8 py-2 rounded-xl border border-gray-200 dark:border-gray-700 bg-gray-50 dark:bg-white/5 text-xs text-gray-900 dark:text-white focus:outline-none focus:border-blue-500"
                 />
-                {historySearchQuery && (
-                  <button
-                    type="button"
-                    onClick={() => setHistorySearchQuery('')}
-                    className="absolute left-2.5 text-gray-400 hover:text-white p-0.5"
-                  >
-                    <X className="w-3.5 h-3.5" />
-                  </button>
-                )}
               </div>
 
               <div className="flex items-center gap-1.5 overflow-x-auto no-scrollbar text-[11px]">
@@ -1819,51 +1815,45 @@ export default function App() {
                     historyFilterCategory === 'domains' ? 'bg-blue-600 text-white' : 'bg-gray-100 dark:bg-white/5'
                   }`}
                 >
-                  المواقع والنطاقات 🌐
+                  المواقع 🌐
                 </button>
               </div>
             </div>
 
             <div className="flex-1 overflow-y-auto p-3 space-y-2">
-              {filteredHistory.length === 0 ? (
-                <div className="text-center py-16 text-gray-400 text-xs">لا توجد نتائج مطابقة</div>
-              ) : (
-                filteredHistory.map((h, i) => (
-                  <div
-                    key={i}
-                    onClick={() => {
-                      navigateCurrentTab(h.url);
-                      setIsHistoryDrawerOpen(false);
-                    }}
-                    className="p-3 rounded-xl border border-gray-100 dark:border-gray-700/60 hover:border-blue-500 hover:bg-blue-50/40 cursor-pointer transition flex items-center justify-between group"
-                  >
-                    <div className="truncate flex-1 pl-2">
-                      <div className="text-xs font-bold truncate mb-0.5">{h.title}</div>
-                      <div className="text-[10px] text-gray-400 font-mono truncate dir-ltr text-left">
-                        {h.url}
-                      </div>
-                    </div>
-                    <div className="flex items-center gap-2 shrink-0">
-                      <span className="text-[10px] text-gray-400 font-mono">{h.time}</span>
-                      <button
-                        type="button"
-                        onClick={(e) => handleDeleteHistoryItem(i, e)}
-                        className="opacity-0 group-hover:opacity-100 p-1 text-gray-400 hover:text-red-500 rounded-md"
-                      >
-                        <Trash2 className="w-3.5 h-3.5" />
-                      </button>
+              {filteredHistory.map((h, i) => (
+                <div
+                  key={i}
+                  onClick={() => {
+                    navigateCurrentTab(h.url);
+                    setIsHistoryDrawerOpen(false);
+                  }}
+                  className="p-3 rounded-xl border border-gray-100 dark:border-gray-700/60 hover:border-blue-500 hover:bg-blue-50/40 cursor-pointer transition flex items-center justify-between group"
+                >
+                  <div className="truncate flex-1 pl-2 text-right">
+                    <div className="text-xs font-bold truncate mb-0.5">{h.title}</div>
+                    <div className="text-[10px] text-gray-400 font-mono truncate dir-ltr text-left">
+                      {h.url}
                     </div>
                   </div>
-                ))
-              )}
+                  <div className="flex items-center gap-2 shrink-0">
+                    <span className="text-[10px] text-gray-400 font-mono">{h.time}</span>
+                    <button
+                      type="button"
+                      onClick={(e) => handleDeleteHistoryItem(i, e)}
+                      className="opacity-0 group-hover:opacity-100 p-1 text-gray-400 hover:text-red-500 rounded-md"
+                    >
+                      <Trash2 className="w-3.5 h-3.5" />
+                    </button>
+                  </div>
+                </div>
+              ))}
             </div>
           </div>
         </div>
       )}
 
-      {/* ═══════════════════════════════════════════════════════════════
-          8. مدير مهام كروم (Task Manager)
-      ═══════════════════════════════════════════════════════════════ */}
+      {/* مدير مهام كروم (Task Manager) */}
       {isTaskManagerOpen && (
         <div
           className="fixed inset-0 z-50 bg-black/40 backdrop-blur-2xs flex items-center justify-center p-4"
@@ -1871,7 +1861,7 @@ export default function App() {
         >
           <div
             onClick={(e) => e.stopPropagation()}
-            className="w-full max-w-2xl bg-white dark:bg-[#2B2D30] rounded-2xl shadow-2xl border border-gray-200 dark:border-gray-700 overflow-hidden flex flex-col"
+            className="w-full max-w-2xl bg-white dark:bg-[#2B2D30] rounded-2xl shadow-2xl border border-gray-200 dark:border-gray-700 overflow-hidden flex flex-col text-right"
           >
             <div className="px-5 py-4 border-b border-gray-200 dark:border-gray-700 flex items-center justify-between bg-gray-50 dark:bg-white/5">
               <div className="flex items-center gap-2">
@@ -1928,7 +1918,7 @@ export default function App() {
 
             <div className="p-4 bg-gray-50 dark:bg-white/5 border-t border-gray-200 dark:border-gray-700 flex items-center justify-between">
               <span className="text-[11px] text-gray-500">
-                بنية متعددة العمليات (Multi-Process): عزل تام بين المواقع وتشغيل الفيديو
+                بنية متعددة العمليات (Multi-Process Architecture): عزل تام بين المواقع وتشغيل الفيديو
               </span>
               <button
                 type="button"
@@ -1936,16 +1926,14 @@ export default function App() {
                 onClick={() => selectedProcessPid && handleKillProcess(selectedProcessPid)}
                 className="px-4 py-1.5 rounded-lg bg-red-600 hover:bg-red-700 disabled:opacity-40 text-white font-bold text-xs"
               >
-                إنهاء العملية (End Process)
+                إنهاء العملية
               </button>
             </div>
           </div>
         </div>
       )}
 
-      {/* ═══════════════════════════════════════════════════════════════
-          9. نافذة إعدادات Free VPN ونفق WireGuard المشفر
-      ═══════════════════════════════════════════════════════════════ */}
+      {/* نافذة Free VPN */}
       {isVpnModalOpen && (
         <div
           className="fixed inset-0 z-50 bg-black/40 backdrop-blur-2xs flex items-center justify-center p-4"
@@ -1953,7 +1941,7 @@ export default function App() {
         >
           <div
             onClick={(e) => e.stopPropagation()}
-            className="w-full max-w-md bg-white dark:bg-[#2B2D30] rounded-2xl shadow-2xl border border-gray-200 dark:border-gray-700 overflow-hidden flex flex-col"
+            className="w-full max-w-md bg-white dark:bg-[#2B2D30] rounded-2xl shadow-2xl border border-gray-200 dark:border-gray-700 overflow-hidden flex flex-col text-right"
           >
             <div className="p-4 border-b border-gray-200 dark:border-gray-700 flex items-center justify-between bg-emerald-50 dark:bg-emerald-950/20">
               <div className="flex items-center gap-2">
@@ -2028,57 +2016,7 @@ export default function App() {
         </div>
       )}
 
-      {/* ═══════════════════════════════════════════════════════════════
-          10. درج التنزيلات (Downloads Drawer)
-      ═══════════════════════════════════════════════════════════════ */}
-      {isDownloadsDrawerOpen && (
-        <div
-          className="fixed inset-0 z-50 bg-black/40 backdrop-blur-2xs flex justify-end"
-          onClick={() => setIsDownloadsDrawerOpen(false)}
-        >
-          <div
-            onClick={(e) => e.stopPropagation()}
-            className="w-full max-w-md h-full bg-white dark:bg-[#2B2D30] shadow-2xl flex flex-col border-r border-gray-200 dark:border-gray-700"
-          >
-            <div className="p-4 border-b border-gray-200 dark:border-gray-700 flex items-center justify-between bg-gray-50 dark:bg-white/5">
-              <div className="flex items-center gap-2">
-                <Download className="w-5 h-5 text-blue-600" />
-                <h3 className="font-bold text-sm text-gray-900 dark:text-white">
-                  التنزيلات ({downloadsList.length})
-                </h3>
-              </div>
-              <button
-                type="button"
-                onClick={() => setIsDownloadsDrawerOpen(false)}
-                className="p-1 rounded-full text-gray-400 hover:text-white"
-              >
-                <X className="w-5 h-5" />
-              </button>
-            </div>
-
-            <div className="flex-1 overflow-y-auto p-4 space-y-3">
-              {downloadsList.map((d) => (
-                <div
-                  key={d.id}
-                  className="p-3 rounded-xl border border-gray-200 dark:border-gray-700 bg-gray-50 dark:bg-white/5 flex items-center justify-between"
-                >
-                  <div>
-                    <div className="text-xs font-bold truncate max-w-[220px]">{d.filename}</div>
-                    <div className="text-[10px] text-gray-400">{d.size} • {d.time}</div>
-                  </div>
-                  <span className="text-[10px] font-bold text-emerald-600 bg-emerald-50 dark:bg-emerald-950/40 px-2 py-0.5 rounded-full">
-                    مكتمل ✅
-                  </span>
-                </div>
-              ))}
-            </div>
-          </div>
-        </div>
-      )}
-
-      {/* ═══════════════════════════════════════════════════════════════
-          11. نافذة الملف الشخصي والمزامنة (Profile Modal)
-      ═══════════════════════════════════════════════════════════════ */}
+      {/* نافذة الملف الشخصي */}
       {isProfileModalOpen && (
         <div
           className="fixed inset-0 z-50 bg-black/40 backdrop-blur-2xs flex items-center justify-center p-4"
@@ -2092,32 +2030,15 @@ export default function App() {
               {userProfile.isLoggedIn ? userProfile.name.charAt(0).toUpperCase() : <User className="w-6 h-6" />}
             </div>
             <h3 className="font-bold text-sm mb-0.5">
-              {userProfile.isLoggedIn ? userProfile.name : 'مستخدم AnwerBrowser'}
+              {userProfile.isLoggedIn ? userProfile.name : 'مستخدم Google'}
             </h3>
             <p className="text-[11px] text-gray-500 mb-4">
               {userProfile.isLoggedIn ? userProfile.email : 'المزامنة السحابية وقاعدة البيانات نشطة'}
             </p>
-
-            <button
-              type="button"
-              onClick={() => {
-                setUserProfile((prev) => ({
-                  ...prev,
-                  isLoggedIn: !prev.isLoggedIn,
-                  name: !prev.isLoggedIn ? 'أنور القرشي' : '',
-                  email: !prev.isLoggedIn ? 'anwer@browser.com' : '',
-                }));
-                showToast(!userProfile.isLoggedIn ? 'تم تسجيل الدخول والمزامنة' : 'تم تسجيل الخروج');
-                setIsProfileModalOpen(false);
-              }}
-              className="w-full py-2 rounded-xl bg-blue-600 hover:bg-blue-700 text-white font-bold text-xs mb-2 transition"
-            >
-              {userProfile.isLoggedIn ? 'تسجيل الخروج' : 'تسجيل الدخول ومزامنة البيانات'}
-            </button>
             <button
               type="button"
               onClick={() => setIsProfileModalOpen(false)}
-              className="w-full py-2 rounded-xl bg-gray-100 dark:bg-white/10 hover:bg-gray-200 text-xs font-semibold"
+              className="w-full py-2 rounded-xl bg-blue-600 text-white font-bold text-xs"
             >
               إغلاق
             </button>
