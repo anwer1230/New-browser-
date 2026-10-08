@@ -66,6 +66,13 @@ import {
 import { SUPPORTED_LANGUAGES, translateTextOnline } from './services/translator.ts';
 import { ChromeNewTabPage } from './components/ChromeNewTabPage.tsx';
 import { ChromeSERP } from './components/ChromeSERP.tsx';
+import {
+  MSESourceBufferPipeline,
+  MSEPipelineStats,
+  isMSESupported,
+  getBestSupportedMSEMime,
+} from './services/msePipeline.ts';
+import { MSEPlayerPanel } from './components/MSEPlayerPanel.tsx';
 
 // ══════════════════════════════════════════════════════════════════════
 // 1. نماذج بيانات المحرك البرمجي والعمليات المتعددة (Engine Data Models)
@@ -901,6 +908,27 @@ export default function App() {
   const [videoLoadError, setVideoLoadError] = useState<string | null>(null);
   const [videoFormatFallbackAttempted, setVideoFormatFallbackAttempted] = useState<boolean>(false);
 
+  // ═══ منظومة Media Source Extensions (MSE) و SourceBuffer Pipeline ═══
+  const msePipelineRef = useRef<MSESourceBufferPipeline | null>(null);
+  const [isMSEActive, setIsMSEActive] = useState<boolean>(true);
+  const [videoCurrentTime, setVideoCurrentTime] = useState<number>(0);
+  const [videoTotalDuration, setVideoTotalDuration] = useState<number>(0);
+  const [mseStats, setMseStats] = useState<MSEPipelineStats>({
+    isSupported: isMSESupported(),
+    active: false,
+    mimeType: getBestSupportedMSEMime(),
+    sourceState: 'closed',
+    sourceBufferMode: 'sequence',
+    chunksAppended: 0,
+    totalBytesAppended: 0,
+    bufferedRanges: [],
+    bufferAhead: 0,
+    isUpdating: false,
+    streamMode: 'chunked-range',
+    currentBitrateKbps: 2400,
+    quality: '1080p',
+  });
+
   // ═══ ميزة ترجمة الصفحة الفورية عبر قاموس أونلاين (Translate Page) ═══
   const [targetLanguage, setTargetLanguage] = useState<string>('ar');
   const [isTranslating, setIsTranslating] = useState<boolean>(false);
@@ -1098,6 +1126,131 @@ export default function App() {
       }, 500);
     } else {
       setVideoLoadError('⚠️ تعذر تشغيل هذا التنسيق. يمكنك التبديل يدوياً إلى تنسيق آخر أو إعادة المحاولة.');
+    }
+  };
+
+  // ═══ إدارة دورة حياة أنبوب Media Source Extensions (SourceBuffer Pipeline) ═══
+  useEffect(() => {
+    if (!isVideoPlayerOpen || !currentPlayingVideo) {
+      if (msePipelineRef.current) {
+        msePipelineRef.current.cleanup();
+        msePipelineRef.current = null;
+      }
+      return;
+    }
+
+    const embedInfo = getEmbedVideoInfo(currentPlayingVideo.streamUrl);
+    if (embedInfo.isEmbed || !isMSEActive) {
+      if (msePipelineRef.current) {
+        msePipelineRef.current.cleanup();
+        msePipelineRef.current = null;
+      }
+      return;
+    }
+
+    let isCancelled = false;
+
+    const initMSE = async () => {
+      const videoEl = videoPlayerRef.current;
+      if (!videoEl) return;
+
+      try {
+        if (msePipelineRef.current) {
+          msePipelineRef.current.cleanup();
+        }
+
+        const pipeline = new MSESourceBufferPipeline({
+          mimeType: mseStats.mimeType,
+          mode: mseStats.sourceBufferMode,
+          onStats: (newStats) => {
+            if (!isCancelled) setMseStats(newStats);
+          },
+          onError: (err) => {
+            console.warn('MSE Pipeline error:', err);
+          },
+        });
+        msePipelineRef.current = pipeline;
+
+        await pipeline.initialize(videoEl, mseStats.mimeType);
+        if (isCancelled) return;
+
+        showToast('⚡ تم ربط أنبوب Media Source Extensions (SourceBuffer)');
+
+        // بدء جلب وتدفق الشرائح الثنائية للـ SourceBuffer
+        pipeline
+          .startDynamicChunkStreaming(currentPlayingVideo.streamUrl)
+          .catch(() => {
+            if (!isCancelled) {
+              pipeline.generateSyntheticDemoSegments(4);
+            }
+          });
+      } catch (err) {
+        console.warn('MSE Initialization Notice:', err);
+        if (!isCancelled && msePipelineRef.current) {
+          msePipelineRef.current.generateSyntheticDemoSegments(3);
+        }
+      }
+    };
+
+    const timer = setTimeout(() => {
+      initMSE();
+    }, 150);
+
+    return () => {
+      isCancelled = true;
+      clearTimeout(timer);
+      if (msePipelineRef.current) {
+        msePipelineRef.current.cleanup();
+        msePipelineRef.current = null;
+      }
+    };
+  }, [isVideoPlayerOpen, currentPlayingVideo?.id, isMSEActive, mseStats.mimeType]);
+
+  const handleToggleMSE = (enable: boolean) => {
+    setIsMSEActive(enable);
+    if (enable) {
+      showToast('⚡ تم تفعيل تدفق القطع الثنائية Media Source Extensions (MSE)');
+    } else {
+      showToast('🎬 تم التبديل إلى المشغل القياسي Direct HTML5');
+      if (videoPlayerRef.current) {
+        videoPlayerRef.current.src = '';
+        videoPlayerRef.current.load();
+      }
+    }
+  };
+
+  const handleAppendChunkManually = () => {
+    if (msePipelineRef.current) {
+      msePipelineRef.current.generateSyntheticDemoSegments(1);
+      showToast('📥 تم جلب ودمج شريحة بيانات 64KB في SourceBuffer بنجاح');
+    }
+  };
+
+  const handleEvictBuffer = () => {
+    if (msePipelineRef.current) {
+      msePipelineRef.current.evictBufferBefore(5);
+      showToast('🧹 تم تفريغ أجزاء الفيديو المستهلكة من الذاكرة (Buffer Eviction)');
+    }
+  };
+
+  const handleChangeMimeType = (mime: string) => {
+    setMseStats((prev) => ({ ...prev, mimeType: mime }));
+    showToast(`تم تغيير ترميز MSE إلى: ${mime.split(';')[0]}`);
+  };
+
+  const handleChangeMode = (mode: 'segments' | 'sequence') => {
+    if (msePipelineRef.current) {
+      msePipelineRef.current.setMode(mode);
+    }
+    setMseStats((prev) => ({ ...prev, sourceBufferMode: mode }));
+    showToast(`تم تغيير وضع SourceBuffer إلى: ${mode}`);
+  };
+
+  const handleResetPipeline = () => {
+    if (msePipelineRef.current && videoPlayerRef.current) {
+      msePipelineRef.current.initialize(videoPlayerRef.current, mseStats.mimeType);
+      msePipelineRef.current.generateSyntheticDemoSegments(3);
+      showToast('🔄 تمت إعادة ضبط MediaSource و SourceBuffer بنجاح');
     }
   };
 
@@ -1738,7 +1891,11 @@ export default function App() {
                 </div>
                 <div className="flex items-center gap-2">
                   <span className="hidden sm:inline-block px-2 py-0.5 rounded text-[10px] bg-rose-950/80 text-rose-300 border border-rose-800 font-mono">
-                    {embedInfo.isEmbed ? 'IFRAME EMBED' : `${selectedVideoFormat.toUpperCase()} (H.264/AAC)`}
+                    {embedInfo.isEmbed
+                      ? 'IFRAME EMBED'
+                      : isMSEActive
+                      ? 'MSE SOURCEBUFFER (DASH/HLS)'
+                      : `${selectedVideoFormat.toUpperCase()} (H.264/AAC)`}
                   </span>
                   <button
                     type="button"
@@ -1763,10 +1920,10 @@ export default function App() {
                     allowFullScreen
                   />
                 ) : (
-                  /* عنصر الفيديو المباشر مع دعم التنسيقات المتعددة ومعالجة الأخطاء */
+                  /* عنصر الفيديو المباشر مع دعم التنسيقات المتعددة وتقنية MSE */
                   <video
                     ref={videoPlayerRef}
-                    key={`${currentPlayingVideo.id}_${selectedVideoFormat}`}
+                    key={`${currentPlayingVideo.id}_${selectedVideoFormat}_${isMSEActive ? 'mse' : 'direct'}`}
                     poster={currentPlayingVideo.thumbnail}
                     controls
                     autoPlay
@@ -1774,6 +1931,17 @@ export default function App() {
                     crossOrigin="anonymous"
                     preload="auto"
                     className="w-full h-full object-contain"
+                    onTimeUpdate={(e) => {
+                      setVideoCurrentTime(e.currentTarget.currentTime);
+                      if (e.currentTarget.duration) {
+                        setVideoTotalDuration(e.currentTarget.duration);
+                      }
+                    }}
+                    onLoadedMetadata={(e) => {
+                      if (e.currentTarget.duration) {
+                        setVideoTotalDuration(e.currentTarget.duration);
+                      }
+                    }}
                     onWaiting={() => setIsVideoBuffering(true)}
                     onPlaying={() => {
                       setIsVideoBuffering(false);
@@ -1782,30 +1950,34 @@ export default function App() {
                     onCanPlay={() => setIsVideoBuffering(false)}
                     onError={handleVideoError}
                   >
-                    {selectedVideoFormat === 'mp4' && (
-                      <source
-                        src={sources.mp4Url}
-                        type="video/mp4; codecs='avc1.42E01E, mp4a.40.2'"
-                      />
+                    {!isMSEActive && (
+                      <>
+                        {selectedVideoFormat === 'mp4' && (
+                          <source
+                            src={sources.mp4Url}
+                            type="video/mp4; codecs='avc1.42E01E, mp4a.40.2'"
+                          />
+                        )}
+                        {selectedVideoFormat === 'webm' && (
+                          <source
+                            src={sources.webmUrl}
+                            type="video/webm; codecs='vp8, vorbis'"
+                          />
+                        )}
+                        {selectedVideoFormat === 'ogg' && (
+                          <source
+                            src={sources.oggUrl}
+                            type="video/ogg; codecs='theora, vorbis'"
+                          />
+                        )}
+                        {/* مصادر بديلة للمتانة والتوافق الشامل */}
+                        <source src={sources.mp4Url} type="video/mp4" />
+                        <source src={sources.webmUrl} type="video/webm" />
+                        <source src={sources.oggUrl} type="video/ogg" />
+                      </>
                     )}
-                    {selectedVideoFormat === 'webm' && (
-                      <source
-                        src={sources.webmUrl}
-                        type="video/webm; codecs='vp8, vorbis'"
-                      />
-                    )}
-                    {selectedVideoFormat === 'ogg' && (
-                      <source
-                        src={sources.oggUrl}
-                        type="video/ogg; codecs='theora, vorbis'"
-                      />
-                    )}
-                    {/* مصادر بديلة للمتانة والتوافق الشامل */}
-                    <source src={sources.mp4Url} type="video/mp4" />
-                    <source src={sources.webmUrl} type="video/webm" />
-                    <source src={sources.oggUrl} type="video/ogg" />
                     <p className="text-xs text-white p-4">
-                      متصفحك لا يدعم عنصر الفيديو المباشر.
+                      متصفحك لا يدعم عنصر الفيديو المباشر أو Media Source Extensions.
                     </p>
                   </video>
                 )}
@@ -1815,7 +1987,7 @@ export default function App() {
                   <div className="absolute inset-0 bg-black/40 flex items-center justify-center pointer-events-none">
                     <div className="flex flex-col items-center gap-2 bg-black/70 px-4 py-3 rounded-xl border border-white/10">
                       <RotateCw className="w-6 h-6 text-rose-500 animate-spin" />
-                      <span className="text-xs text-white font-semibold">جاري تحميل البث...</span>
+                      <span className="text-xs text-white font-semibold">جاري تحميل البث (Buffering)...</span>
                     </div>
                   </div>
                 )}
@@ -1840,6 +2012,22 @@ export default function App() {
                   </div>
                 )}
               </div>
+
+              {/* لوحة تحكم أنبوب Media Source Extensions (MSE) و SourceBuffer Pipeline */}
+              {!embedInfo.isEmbed && (
+                <MSEPlayerPanel
+                  stats={mseStats}
+                  isMSEActive={isMSEActive}
+                  onToggleMSE={handleToggleMSE}
+                  onAppendChunkManually={handleAppendChunkManually}
+                  onEvictBuffer={handleEvictBuffer}
+                  onChangeMimeType={handleChangeMimeType}
+                  onChangeMode={handleChangeMode}
+                  onResetPipeline={handleResetPipeline}
+                  currentTime={videoCurrentTime}
+                  videoDuration={videoTotalDuration || 120}
+                />
+              )}
 
               {/* أدوات التحكم السفلية */}
               <div className="p-4 bg-[#242526] flex flex-wrap items-center justify-between gap-3 text-xs border-t border-gray-800">
