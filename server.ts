@@ -1057,6 +1057,83 @@ async function startServer() {
   app.use(express.urlencoded({ extended: true, limit: '25mb' }));
   app.use('/media', express.static(MEDIA_DIR));
 
+  // --- Google Direct Endpoints ---
+  app.get('/api/google/suggest', async (req: Request, res: Response) => {
+    const q = req.query.q as string;
+    if (!q) return res.json([]);
+    try {
+      const url = `https://suggestqueries.google.com/complete/search?client=chrome&hl=ar&q=${encodeURIComponent(q)}`;
+      const resp = await fetch(url);
+      if (!resp.ok) return res.json([]);
+      const data = await resp.json();
+      res.json(Array.isArray(data[1]) ? data[1] : []);
+    } catch {
+      res.json([]);
+    }
+  });
+
+  app.get('/api/google/search', async (req: Request, res: Response) => {
+    const q = (req.query.q as string) || '';
+    if (!q) return res.json({ results: [] });
+    try {
+      const googleUrl = `https://www.google.com/search?q=${encodeURIComponent(q)}&hl=ar&num=20`;
+      const resp = await fetch(googleUrl, {
+        headers: {
+          'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/128.0.0.0 Safari/537.36',
+          'Accept-Language': 'ar,en-US;q=0.9,en;q=0.8'
+        }
+      });
+      const html = await resp.text();
+      const results: Array<{ title: string; url: string; snippet: string; domain: string; isArabicSubtitle: boolean }> = [];
+      const blocks = html.split('<div class="g"').slice(1);
+      for (const block of blocks.slice(0, 15)) {
+        const titleMatch = block.match(/<h3[^>]*>(.*?)<\/h3>/);
+        const linkMatch = block.match(/<a\s+(?:[^>]*?\s+)?href="([^"]*)"/);
+        const snippetMatch = block.match(/<div class="[^"]*VwiC3b[^"]*"[^>]*>(.*?)<\/div>/);
+        if (titleMatch && linkMatch) {
+          const cleanTitle = titleMatch[1].replace(/<[^>]+>/g, '').trim();
+          let link = linkMatch[1];
+          if (link.startsWith('/url?q=')) {
+            link = decodeURIComponent(link.split('/url?q=')[1].split('&')[0]);
+          }
+          const cleanSnippet = snippetMatch ? snippetMatch[1].replace(/<[^>]+>/g, '').trim() : '';
+          let domain = 'google.com';
+          try { domain = new URL(link).hostname.replace('www.', ''); } catch {}
+          const isArabic = /[\u0600-\u06FF]/.test(cleanTitle + ' ' + cleanSnippet);
+          const hasSubKeyword = /ترجمة|مترجم|subtitle|srt/i.test(cleanTitle + ' ' + cleanSnippet);
+          results.push({
+            title: cleanTitle,
+            url: link,
+            snippet: cleanSnippet,
+            domain,
+            isArabicSubtitle: isArabic && hasSubKeyword
+          });
+        }
+      }
+      res.json({ results });
+    } catch (e: any) {
+      res.json({ results: [], error: e.message });
+    }
+  });
+
+  app.get('/api/google/proxy', async (req: Request, res: Response) => {
+    const targetUrl = req.query.url as string;
+    if (!targetUrl) return res.status(400).send('URL required');
+    try {
+      const resp = await fetch(targetUrl, {
+        headers: {
+          'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/128.0.0.0 Safari/537.36'
+        }
+      });
+      const contentType = resp.headers.get('content-type') || 'text/html';
+      res.setHeader('Content-Type', contentType);
+      const buffer = await resp.arrayBuffer();
+      res.send(Buffer.from(buffer));
+    } catch (err: any) {
+      res.status(500).send(`Proxy error: ${err.message}`);
+    }
+  });
+
   seedInitialDocuments().catch((err) => console.error('Seed error:', err));
 
   const verifyKey = (req: Request, res: Response, next: NextFunction) => {
