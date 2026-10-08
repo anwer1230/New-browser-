@@ -3,7 +3,7 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import {
   Globe,
   Shield,
@@ -12,99 +12,247 @@ import {
   RotateCw,
   Home,
   Bookmark,
-  FolderOpen,
-  Layers,
   History,
-  Download,
   ExternalLink,
-  CheckCircle2,
-  Sparkles,
-  GitBranch,
-  Cloud,
+  Plus,
+  X,
   Search,
   BookOpen,
+  Volume2,
+  Film,
+  Sparkles,
+  Share2,
+  CheckCircle2,
+  Layers,
+  Clock,
+  Compass,
 } from 'lucide-react';
-import { onAuthStateChanged, User } from 'firebase/auth';
-import {
-  auth,
-  db,
-  collection,
-  query,
-  where,
-  onSnapshot,
-  handleFirestoreError,
-  OperationType,
-  StoredWatchHistoryItem,
-  StoredCloudInfrastructure,
-  StoredSavedPage,
-} from './firebase';
-import {
-  AnwerBrowserWorkspace,
-  HybridBrowserWorkspace,
-  BrowserSectionView,
-} from './components/HybridBrowserWorkspace';
-import { InfrastructureApprovalModal } from './components/InfrastructureApprovalModal';
-import { PWAInstallBanner } from './components/PWAInstallBanner';
+
+interface TabItem {
+  id: string;
+  title: string;
+  url: string;
+  history: string[];
+  historyIndex: number;
+  loading: boolean;
+  pageData?: {
+    title: string;
+    content_ar: string;
+    raw_snippet?: string;
+    extracted_links?: Array<{ title: string; url: string }>;
+    web_results?: any[];
+    discovered_videos?: any[];
+  } | null;
+}
+
+interface SavedBookmark {
+  url: string;
+  title: string;
+  date: string;
+}
 
 export default function App() {
-  // Navigation & Tabs State
-  const [activeTab, setActiveTab] = useState<'direct' | 'pro' | 'status'>('direct');
-  const [activeSubView, setActiveSubView] = useState<BrowserSectionView>('home');
-  const [activeUrl, setActiveUrl] = useState('https://www.google.com');
-  const [urlInput, setUrlInput] = useState('https://www.google.com');
-  const [history, setHistory] = useState<string[]>(['https://www.google.com']);
-  const [historyIndex, setHistoryIndex] = useState(0);
-  const [searchQuery, setSearchQuery] = useState('');
+  // ═══ إدارة التبويبات المستقلة الحقيقية (Independent Tabs) ═══
+  const [tabs, setTabs] = useState<TabItem[]>([
+    {
+      id: 'tab_1',
+      title: 'Google',
+      url: 'https://www.google.com',
+      history: ['https://www.google.com'],
+      historyIndex: 0,
+      loading: false,
+      pageData: null,
+    },
+  ]);
+  const [activeTabId, setActiveTabId] = useState<string>('tab_1');
+  const [urlInput, setUrlInput] = useState<string>('https://www.google.com');
+  const [searchQuery, setSearchQuery] = useState<string>('');
+  const [isReaderMode, setIsReaderMode] = useState<boolean>(false);
+  const [isLiveFrameMode, setIsLiveFrameMode] = useState<boolean>(false);
 
-  // Firebase & Infra State
-  const [user, setUser] = useState<User | null>(null);
-  const [authReady, setAuthReady] = useState(false);
-  const [isApprovalModalOpen, setIsApprovalModalOpen] = useState(false);
-  const [hasExistingInfraDoc, setHasExistingInfraDoc] = useState(false);
-  const [watchHistory, setWatchHistory] = useState<StoredWatchHistoryItem[]>([]);
-  const [cloudSavedPages, setCloudSavedPages] = useState<StoredSavedPage[]>([]);
-
-  // 1. Firebase Auth Listener
-  useEffect(() => {
-    const unsub = onAuthStateChanged(auth, (currentUser) => {
-      setUser(currentUser);
-      setAuthReady(true);
-    });
-    return () => unsub();
-  }, []);
-
-  const handlePlayTts = async (text: string) => {
+  // أدراج المحفوظات والسجل
+  const [isBookmarksOpen, setIsBookmarksOpen] = useState<boolean>(false);
+  const [isHistoryOpen, setIsHistoryOpen] = useState<boolean>(false);
+  const [bookmarks, setBookmarks] = useState<SavedBookmark[]>(() => {
     try {
-      const res = await fetch('/api/tts', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ text: text.slice(0, 600) }),
-      });
-      if (res.ok) {
-        const data = await res.json();
-        if (data.audioBase64) {
-          const audio = new Audio(`data:audio/wav;base64,${data.audioBase64}`);
-          await audio.play();
-          return;
-        }
-      }
-    } catch {}
-    if ('speechSynthesis' in window) {
-      const utterance = new SpeechSynthesisUtterance(text);
-      utterance.lang = 'ar-SA';
-      window.speechSynthesis.speak(utterance);
+      const raw = localStorage.getItem('anwer_bookmarks');
+      return raw ? JSON.parse(raw) : [];
+    } catch {
+      return [];
     }
+  });
+  const [browseHistory, setBrowseHistory] = useState<SavedBookmark[]>(() => {
+    try {
+      const raw = localStorage.getItem('anwer_history');
+      return raw ? JSON.parse(raw) : [];
+    } catch {
+      return [];
+    }
+  });
+
+  const [toastMsg, setToastMsg] = useState<string | null>(null);
+  const toastTimeoutRef = useRef<NodeJS.Timeout | null>(null);
+
+  const showToast = (msg: string) => {
+    setToastMsg(msg);
+    if (toastTimeoutRef.current) clearTimeout(toastTimeoutRef.current);
+    toastTimeoutRef.current = setTimeout(() => setToastMsg(null), 3000);
   };
+
+  const activeTab = tabs.find((t) => t.id === activeTabId) || tabs[0];
+
+  // مزامنة حقل العنوان مع التبويب النشط
+  useEffect(() => {
+    setUrlInput(activeTab.url);
+  }, [activeTab.url, activeTabId]);
+
+  // حفظ العلامات في التخزين المحلي
+  useEffect(() => {
+    try {
+      localStorage.setItem('anwer_bookmarks', JSON.stringify(bookmarks));
+    } catch {}
+  }, [bookmarks]);
+
+  useEffect(() => {
+    try {
+      localStorage.setItem('anwer_history', JSON.stringify(browseHistory));
+    } catch {}
+  }, [browseHistory]);
 
   const quickLinks = [
     { name: 'ويكيبيديا', url: 'https://ar.wikipedia.org', icon: '📚' },
     { name: 'أخبار التقنية', url: 'https://news.ycombinator.com', icon: '💻' },
     { name: 'BBC عربي', url: 'https://www.bbc.com/arabic', icon: '🌍' },
+    { name: 'يوتيوب', url: 'https://www.youtube.com', icon: '▶️' },
+    { name: 'الطقس اليوم', url: 'https://www.google.com/search?q=طقس+اليوم', icon: '☀️' },
     { name: 'Google بحث', url: 'https://www.google.com', icon: '🔍' },
+    { name: 'ترجمة فورية', url: 'https://translate.google.com', icon: '🌐' },
+    { name: 'GitHub', url: 'https://github.com', icon: '🐙' },
   ];
 
-  const handleNavigate = (target: string) => {
-    let clean = target.trim();
+  // ═══ إضافة تبويب جديد مستقل ═══
+  const createNewTab = (initialUrl: string = 'https://www.google.com') => {
+    const newId = `tab_${Date.now()}`;
+    const newTab: TabItem = {
+      id: newId,
+      title: initialUrl.includes('google.com') ? 'Google' : 'تبويب جديد',
+      url: initialUrl,
+      history: [initialUrl],
+      historyIndex: 0,
+      loading: false,
+      pageData: null,
+    };
+    setTabs((prev) => [...prev, newTab]);
+    setActiveTabId(newId);
+    setUrlInput(initialUrl);
+    if (initialUrl !== 'https://www.google.com') {
+      fetchDirectPageForTab(newId, initialUrl);
+    }
+  };
+
+  // ═══ إغلاق تبويب ═══
+  const closeTab = (idToClose: string, e?: React.MouseEvent) => {
+    if (e) e.stopPropagation();
+    if (tabs.length === 1) {
+      // إذا كان التبويب الأخير، نعيده إلى الرئيسية
+      setTabs([
+        {
+          id: `tab_${Date.now()}`,
+          title: 'Google',
+          url: 'https://www.google.com',
+          history: ['https://www.google.com'],
+          historyIndex: 0,
+          loading: false,
+          pageData: null,
+        },
+      ]);
+      return;
+    }
+    const filtered = tabs.filter((t) => t.id !== idToClose);
+    setTabs(filtered);
+    if (activeTabId === idToClose) {
+      setActiveTabId(filtered[filtered.length - 1].id);
+    }
+  };
+
+  // ═══ جلب محتوى الموقع مباشرة في التبويب ═══
+  const fetchDirectPageForTab = async (tabId: string, targetUrl: string) => {
+    if (targetUrl === 'https://www.google.com' || targetUrl === 'https://google.com') {
+      setTabs((prev) =>
+        prev.map((t) => (t.id === tabId ? { ...t, loading: false, pageData: null } : t))
+      );
+      return;
+    }
+
+    setTabs((prev) =>
+      prev.map((t) => (t.id === tabId ? { ...t, loading: true } : t))
+    );
+
+    // إضافة إلى سجل التصفح
+    setBrowseHistory((prev) => [
+      { url: targetUrl, title: targetUrl, date: new Date().toLocaleTimeString('ar-SA') },
+      ...prev.filter((h) => h.url !== targetUrl).slice(0, 49),
+    ]);
+
+    try {
+      const res = await fetch('/api/browse', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ input: targetUrl, translateToArabic: true }),
+      });
+      if (res.ok) {
+        const data = await res.json();
+        setTabs((prev) =>
+          prev.map((t) =>
+            t.id === tabId
+              ? {
+                  ...t,
+                  loading: false,
+                  title: data.title || targetUrl,
+                  pageData: data,
+                }
+              : t
+          )
+        );
+      } else {
+        setTabs((prev) =>
+          prev.map((t) =>
+            t.id === tabId
+              ? {
+                  ...t,
+                  loading: false,
+                  pageData: {
+                    title: targetUrl,
+                    content_ar: `محتوى الموقع متاح للتصفح المباشر: ${targetUrl}`,
+                    extracted_links: [],
+                  },
+                }
+              : t
+          )
+        );
+      }
+    } catch {
+      setTabs((prev) =>
+        prev.map((t) =>
+          t.id === tabId
+            ? {
+                ...t,
+                loading: false,
+                pageData: {
+                  title: targetUrl,
+                  content_ar: `محتوى الموقع متاح للتصفح المباشر: ${targetUrl}`,
+                  extracted_links: [],
+                },
+              }
+            : t
+        )
+      );
+    }
+  };
+
+  // ═══ التنقل المباشر في التبويب الحالي ═══
+  const navigateCurrentTab = (targetInput: string) => {
+    let clean = targetInput.trim();
     if (!clean) return;
     if (!clean.startsWith('http://') && !clean.startsWith('https://')) {
       if (clean.includes('.') && !clean.includes(' ')) {
@@ -113,394 +261,713 @@ export default function App() {
         clean = `https://www.google.com/search?q=${encodeURIComponent(clean)}`;
       }
     }
+
     setUrlInput(clean);
-    setActiveUrl(clean);
-    const nextHist = [...history.slice(0, historyIndex + 1), clean];
-    setHistory(nextHist);
-    setHistoryIndex(nextHist.length - 1);
+
+    setTabs((prev) =>
+      prev.map((t) => {
+        if (t.id !== activeTabId) return t;
+        const nextHistory = [...t.history.slice(0, t.historyIndex + 1), clean];
+        return {
+          ...t,
+          url: clean,
+          title: clean.includes('google.com') ? 'Google' : clean,
+          history: nextHistory,
+          historyIndex: nextHistory.length - 1,
+          loading: true,
+        };
+      })
+    );
+
+    fetchDirectPageForTab(activeTabId, clean);
   };
 
   const handleBack = () => {
-    if (historyIndex > 0) {
-      const prev = history[historyIndex - 1];
-      setHistoryIndex(historyIndex - 1);
-      setActiveUrl(prev);
-      setUrlInput(prev);
+    if (activeTab.historyIndex > 0) {
+      const prevUrl = activeTab.history[activeTab.historyIndex - 1];
+      setTabs((prev) =>
+        prev.map((t) =>
+          t.id === activeTabId
+            ? {
+                ...t,
+                url: prevUrl,
+                historyIndex: t.historyIndex - 1,
+              }
+            : t
+        )
+      );
+      setUrlInput(prevUrl);
+      fetchDirectPageForTab(activeTabId, prevUrl);
     }
   };
 
   const handleForward = () => {
-    if (historyIndex < history.length - 1) {
-      const next = history[historyIndex + 1];
-      setHistoryIndex(historyIndex + 1);
-      setActiveUrl(next);
-      setUrlInput(next);
+    if (activeTab.historyIndex < activeTab.history.length - 1) {
+      const nextUrl = activeTab.history[activeTab.historyIndex + 1];
+      setTabs((prev) =>
+        prev.map((t) =>
+          t.id === activeTabId
+            ? {
+                ...t,
+                url: nextUrl,
+                historyIndex: t.historyIndex + 1,
+              }
+            : t
+        )
+      );
+      setUrlInput(nextUrl);
+      fetchDirectPageForTab(activeTabId, nextUrl);
     }
   };
 
-  // قاطع التكرار الذاتي: حماية ضد التضمين المتداخل داخل iframe المتصفح
-  const isInsideBrowserViewport =
-    typeof window !== 'undefined' &&
-    (window.name === 'anwer_browser_web_frame' ||
-      window.location.search.includes('in_browser_frame=1') ||
-      (window.self !== window.top &&
-        (window.location.pathname.startsWith('/api/') ||
-          window.location.search.includes('url='))));
+  const handleRefresh = () => {
+    fetchDirectPageForTab(activeTabId, activeTab.url);
+    showToast('جاري تحديث الصفحة...');
+  };
 
-  if (isInsideBrowserViewport) {
-    return (
-      <div
-        className="w-full h-full min-h-[100dvh] flex flex-col items-center justify-center p-6 bg-white dark:bg-[#202124] text-center text-[#202124] dark:text-white"
-        dir="rtl"
-        style={{ fontFamily: "'Cairo', 'Segoe UI', Tahoma, sans-serif" }}
-      >
-        <div className="w-10 h-10 rounded-full border-3 border-blue-600 border-t-transparent animate-spin mb-3" />
-        <p className="text-sm font-semibold mb-1">جاري تحميل الموقع في المتصفح...</p>
-        <p className="text-xs text-gray-500 max-w-xs">
-          إذا تعذّر تحميل الموقع، يمكنك الضغط على زر «فتح مباشر ↗» بأعلى الصفحة.
-        </p>
-      </div>
-    );
-  }
+  const handleHome = () => {
+    navigateCurrentTab('https://www.google.com');
+  };
+
+  const handleToggleBookmark = () => {
+    const isBookmarked = bookmarks.some((b) => b.url === activeTab.url);
+    if (isBookmarked) {
+      setBookmarks((prev) => prev.filter((b) => b.url !== activeTab.url));
+      showToast('تمت إزالة الموقع من المحفوظات');
+    } else {
+      setBookmarks((prev) => [
+        {
+          url: activeTab.url,
+          title: activeTab.title || activeTab.url,
+          date: new Date().toLocaleDateString('ar-SA'),
+        },
+        ...prev,
+      ]);
+      showToast('تم حفظ الصفحة في المحفوظات بنجاح 💾');
+    }
+  };
+
+  const handlePlayTts = (text: string) => {
+    if (!text) return;
+    if ('speechSynthesis' in window) {
+      window.speechSynthesis.cancel();
+      const utterance = new SpeechSynthesisUtterance(text.slice(0, 800));
+      utterance.lang = 'ar-SA';
+      window.speechSynthesis.speak(utterance);
+      showToast('🔊 جاري القراءة الصوتية...');
+    }
+  };
+
+  const isCurrentBookmarked = bookmarks.some((b) => b.url === activeTab.url);
+  const isGoogleHome =
+    activeTab.url === 'https://www.google.com' ||
+    activeTab.url === 'https://google.com' ||
+    !activeTab.url;
 
   return (
     <div
-      className="h-[100dvh] w-full flex flex-col bg-[#F8F9FA] text-[#202124] overflow-hidden select-none"
+      className="h-[100dvh] w-full flex flex-col bg-[#F8F9FA] dark:bg-[#1E1F22] text-[#202124] dark:text-[#E8EAED] overflow-hidden select-none"
       dir="rtl"
       style={{ fontFamily: "'Cairo', 'Segoe UI', Tahoma, sans-serif" }}
     >
-      {/* إشعار تثبيت التطبيق PWA */}
-      <PWAInstallBanner />
+      {/* ═══════════════════════════════════════════════════════════════
+          1. شريط التبويبات المستقلة الحقيقية مثل Google Chrome
+      ═══════════════════════════════════════════════════════════════ */}
+      <div className="h-[42px] bg-[#E8EAED] dark:bg-[#2B2D30] border-b border-[#DADCE0] dark:border-[#1E1F22] flex items-center px-2 gap-1 overflow-x-auto shrink-0 no-scrollbar">
+        {tabs.map((tab) => {
+          const isActive = tab.id === activeTabId;
+          return (
+            <div
+              key={tab.id}
+              onClick={() => setActiveTabId(tab.id)}
+              className={`group h-[34px] max-w-[200px] min-w-[120px] px-3 rounded-t-lg flex items-center justify-between gap-2 text-xs font-semibold cursor-pointer transition select-none ${
+                isActive
+                  ? 'bg-white dark:bg-[#1E1F22] text-[#1A73E8] dark:text-[#8AB4F8] shadow-xs'
+                  : 'text-[#5F6368] dark:text-[#9AA0A6] hover:bg-white/40 dark:hover:bg-white/5'
+              }`}
+            >
+              <div className="flex items-center gap-1.5 truncate">
+                <Globe className={`w-3.5 h-3.5 shrink-0 ${isActive ? 'text-[#1A73E8]' : 'text-gray-400'}`} />
+                <span className="truncate">{tab.title || 'صفحة ويب'}</span>
+              </div>
+              <button
+                type="button"
+                onClick={(e) => closeTab(tab.id, e)}
+                className="w-4 h-4 rounded-full flex items-center justify-center hover:bg-black/10 dark:hover:bg-white/10 text-gray-400 hover:text-gray-700 dark:hover:text-white transition shrink-0"
+                title="إغلاق التبويب"
+              >
+                <X className="w-3 h-3" />
+              </button>
+            </div>
+          );
+        })}
 
-      {/* الشريط العلوي للتبديل بين المتصفح المباشر والمتقدم وسجل النشر */}
-      <div className="bg-[#202124] text-white px-3 py-1.5 flex items-center justify-between text-xs shrink-0">
-        <div className="flex items-center gap-2">
-          <div className="w-2.5 h-2.5 rounded-full bg-emerald-400 animate-pulse" />
-          <span className="font-bold tracking-wide">AnwerBrowser</span>
-          <span className="bg-emerald-600/30 text-emerald-300 px-2 py-0.5 rounded-full text-[10px] border border-emerald-500/30">
-            Render AutoDeploy Active
-          </span>
-        </div>
-        <div className="flex items-center gap-1.5">
-          <button
-            onClick={() => setActiveTab('direct')}
-            className={`px-2.5 py-1 rounded-md transition cursor-pointer flex items-center gap-1 ${
-              activeTab === 'direct' ? 'bg-white/20 font-bold' : 'hover:bg-white/10 text-white/70'
-            }`}
-          >
-            <Globe className="w-3 h-3" />
-            المتصفح المباشر
-          </button>
-          <button
-            onClick={() => setActiveTab('pro')}
-            className={`px-2.5 py-1 rounded-md transition cursor-pointer flex items-center gap-1 ${
-              activeTab === 'pro' ? 'bg-white/20 font-bold' : 'hover:bg-white/10 text-white/70'
-            }`}
-          >
-            <Layers className="w-3 h-3" />
-            المتصفح المتقدم (Pro)
-          </button>
-          <button
-            onClick={() => setActiveTab('status')}
-            className={`px-2.5 py-1 rounded-md transition cursor-pointer flex items-center gap-1 ${
-              activeTab === 'status' ? 'bg-white/20 font-bold' : 'hover:bg-white/10 text-white/70'
-            }`}
-          >
-            <GitBranch className="w-3 h-3" />
-            حالة النشر والمستودع
-          </button>
-        </div>
+        {/* زر إضافة تبويب مستقل جديد (+) */}
+        <button
+          type="button"
+          onClick={() => createNewTab('https://www.google.com')}
+          className="w-8 h-8 rounded-full flex items-center justify-center text-[#5F6368] dark:text-[#9AA0A6] hover:bg-black/5 dark:hover:bg-white/10 transition cursor-pointer shrink-0"
+          title="فتح تبويب جديد"
+        >
+          <Plus className="w-4 h-4" />
+        </button>
       </div>
 
-      {activeTab === 'direct' ? (
-        /* ═══ 1. المتصفح المباشر الخفيف والسريع (لا يلتزم بالآي فريم) ═══ */
-        <div className="flex-1 flex flex-col overflow-hidden">
-          {/* شريط عناوين المتصفح الحقيقي */}
-          <header className="h-[56px] bg-white border-b border-[#E8EAED] px-3 flex items-center gap-2 shrink-0 shadow-xs">
-            {/* أزرار التنقل */}
-            <div className="flex items-center gap-0.5">
-              <button
-                onClick={handleBack}
-                disabled={historyIndex <= 0}
-                className="p-2 rounded-full hover:bg-black/5 disabled:opacity-30 cursor-pointer text-[#5F6368]"
-                title="رجوع"
-              >
-                <ArrowRight className="w-4 h-4" />
-              </button>
-              <button
-                onClick={handleForward}
-                disabled={historyIndex >= history.length - 1}
-                className="p-2 rounded-full hover:bg-black/5 disabled:opacity-30 cursor-pointer text-[#5F6368]"
-                title="تقدم"
-              >
-                <ArrowLeft className="w-4 h-4" />
-              </button>
-              <button
-                onClick={() => handleNavigate(activeUrl)}
-                className="p-2 rounded-full hover:bg-black/5 cursor-pointer text-[#5F6368]"
-                title="تحديث"
-              >
-                <RotateCw className="w-4 h-4" />
-              </button>
-            </div>
-
-            {/* شريط العناوين */}
-            <form
-              onSubmit={(e) => {
-                e.preventDefault();
-                handleNavigate(urlInput);
-              }}
-              className="flex-1 h-[40px] px-3 rounded-full border border-[#DADCE0] focus-within:border-[#1A73E8] focus-within:shadow-xs bg-white flex items-center gap-2"
-            >
-              <Shield className="w-4 h-4 text-emerald-600 shrink-0" />
-              <input
-                type="text"
-                value={urlInput}
-                onChange={(e) => setUrlInput(e.target.value)}
-                placeholder="ابحث في Google أو اكتب عنوان موقع ويب"
-                className="flex-1 bg-transparent text-sm focus:outline-none dir-ltr text-left font-mono truncate"
-              />
-              <button
-                type="submit"
-                className="h-7 px-3 rounded-full bg-blue-600 hover:bg-blue-700 text-white font-bold text-xs flex items-center gap-1 cursor-pointer shrink-0 transition"
-              >
-                <span>انتقال</span>
-                <ArrowLeft className="w-3 h-3" />
-              </button>
-            </form>
-
-            <a
-              href={activeUrl}
-              target="_blank"
-              rel="noopener noreferrer"
-              className="hidden sm:flex items-center gap-1 px-2.5 py-1.5 rounded-lg text-xs font-semibold bg-gray-100 hover:bg-gray-200 text-[#5F6368]"
-              title="فتح في تبويب مستقل"
-            >
-              <ExternalLink className="w-3.5 h-3.5" />
-              <span>فتح مباشر</span>
-            </a>
-          </header>
-
-          {/* مساحة العرض الرئيسية */}
-          <div className="flex-1 overflow-auto bg-white flex flex-col items-center justify-center p-6 relative">
-            {activeUrl === 'https://www.google.com' || activeUrl === 'https://google.com' ? (
-              <div className="w-full max-w-xl flex flex-col items-center text-center -mt-12">
-                <div className="text-5xl font-extrabold tracking-tight mb-6 select-none dir-ltr">
-                  <span className="text-[#4285F4]">A</span>
-                  <span className="text-[#EA4335]">n</span>
-                  <span className="text-[#FBBC05]">w</span>
-                  <span className="text-[#4285F4]">e</span>
-                  <span className="text-[#34A853]">r</span>
-                  <span className="text-[#EA4335]">B</span>
-                  <span className="text-[#4285F4]">r</span>
-                  <span className="text-[#FBBC05]">o</span>
-                  <span className="text-[#34A853]">w</span>
-                  <span className="text-[#EA4335]">s</span>
-                  <span className="text-[#4285F4]">e</span>
-                  <span className="text-[#34A853]">r</span>
-                </div>
-
-                <form
-                  onSubmit={(e) => {
-                    e.preventDefault();
-                    if (searchQuery.trim()) {
-                      handleNavigate(`https://www.google.com/search?q=${encodeURIComponent(searchQuery.trim())}`);
-                    }
-                  }}
-                  className="w-full h-12 px-5 rounded-full border border-gray-300 shadow-xs focus-within:shadow-md focus-within:border-transparent flex items-center gap-3 bg-white transition mb-6"
-                >
-                  <Search className="w-5 h-5 text-gray-400" />
-                  <input
-                    type="text"
-                    value={searchQuery}
-                    onChange={(e) => setSearchQuery(e.target.value)}
-                    placeholder="ابحث في الإنترنت أو اكتب رابطاً..."
-                    className="flex-1 bg-transparent text-sm focus:outline-none"
-                    autoFocus
-                  />
-                  <button
-                    type="submit"
-                    className="px-3 py-1 rounded-full bg-blue-600 text-white text-xs font-semibold hover:bg-blue-700"
-                  >
-                    بحث
-                  </button>
-                </form>
-
-                {/* روابط سريعة */}
-                <div className="grid grid-cols-4 gap-4 w-full max-w-md">
-                  {quickLinks.map((item) => (
-                    <button
-                      key={item.name}
-                      onClick={() => handleNavigate(item.url)}
-                      className="flex flex-col items-center gap-1.5 p-3 rounded-xl hover:bg-gray-100 transition cursor-pointer"
-                    >
-                      <div className="w-12 h-12 rounded-full bg-gray-100 flex items-center justify-center text-xl shadow-xs">
-                        {item.icon}
-                      </div>
-                      <span className="text-xs text-gray-700 font-medium">{item.name}</span>
-                    </button>
-                  ))}
-                </div>
-
-                <div className="mt-8 px-4 py-2 rounded-full bg-emerald-50 border border-emerald-200 text-emerald-800 text-xs flex items-center gap-2">
-                  <CheckCircle2 className="w-4 h-4 text-emerald-600" />
-                  <span>متصفح ذكي مباشر: يفتح المواقع مباشرة داخل التطبيق دون قيود الآي فريم.</span>
-                </div>
-              </div>
-            ) : (
-              <div className="w-full max-w-lg bg-gray-50 border border-gray-200 rounded-2xl p-6 text-center shadow-xs">
-                <div className="w-14 h-14 rounded-full bg-blue-100 text-blue-600 flex items-center justify-center mx-auto mb-4">
-                  <Globe className="w-7 h-7" />
-                </div>
-                <h3 className="text-lg font-bold text-gray-900 mb-2">جاري تصفح:</h3>
-                <div className="text-xs font-mono text-gray-600 bg-white px-3 py-2 rounded-lg border border-gray-200 mb-4 dir-ltr truncate">
-                  {activeUrl}
-                </div>
-                <p className="text-xs text-gray-500 mb-5 leading-relaxed">
-                  تم فتح الرابط مباشرة داخل محرك AnwerBrowser. يمكنك الاستمرار في التصفح المباشر أو الفتح في تبويب مستقل.
-                </p>
-                <div className="flex gap-2 justify-center">
-                  <a
-                    href={activeUrl}
-                    target="_blank"
-                    rel="noopener noreferrer"
-                    className="px-5 py-2.5 rounded-full bg-blue-600 hover:bg-blue-700 text-white font-bold text-xs flex items-center gap-1.5 transition shadow-xs"
-                  >
-                    <span>فتح الموقع في علامة تبويب جديدة</span>
-                    <ExternalLink className="w-3.5 h-3.5" />
-                  </a>
-                  <button
-                    onClick={() => handleNavigate('https://www.google.com')}
-                    className="px-4 py-2.5 rounded-full bg-gray-200 hover:bg-gray-300 text-gray-700 font-bold text-xs transition"
-                  >
-                    الرئيسية
-                  </button>
-                </div>
-              </div>
-            )}
-          </div>
-
-          {/* شريط الأدوات السفلي */}
-          <footer className="h-[56px] bg-[#F8F9FA] border-t border-[#E8EAED] flex items-center justify-evenly shrink-0">
-            <button onClick={handleBack} disabled={historyIndex <= 0} className="p-3 text-[#5F6368] hover:bg-black/5 disabled:opacity-30 rounded-full cursor-pointer" title="رجوع">
-              <ArrowRight className="w-5 h-5" />
-            </button>
-            <button onClick={handleForward} disabled={historyIndex >= history.length - 1} className="p-3 text-[#5F6368] hover:bg-black/5 disabled:opacity-30 rounded-full cursor-pointer" title="تقدم">
-              <ArrowLeft className="w-5 h-5" />
-            </button>
-            <button onClick={() => handleNavigate('https://www.google.com')} className="p-3 text-[#5F6368] hover:bg-black/5 rounded-full cursor-pointer" title="الرئيسية">
-              <Home className="w-5 h-5" />
-            </button>
-            <button onClick={() => alert('تم حفظ الصفحة في المحفوظات')} className="p-3 text-[#5F6368] hover:bg-black/5 rounded-full cursor-pointer" title="حفظ">
-              <Bookmark className="w-5 h-5" />
-            </button>
-            <button onClick={() => alert('سجل التصفح متاح ومحفوظ محلياً')} className="p-3 text-[#5F6368] hover:bg-black/5 rounded-full cursor-pointer" title="السجل">
-              <History className="w-5 h-5" />
-            </button>
-          </footer>
+      {/* ═══════════════════════════════════════════════════════════════
+          2. شريط العناوين والتنقل الموحّد الفردي
+      ═══════════════════════════════════════════════════════════════ */}
+      <header className="h-[54px] bg-white dark:bg-[#1E1F22] border-b border-[#E8EAED] dark:border-[#2B2D30] px-3 flex items-center gap-2 shrink-0 shadow-2xs z-20">
+        {/* أزرار التنقل الأساسية */}
+        <div className="flex items-center gap-0.5 shrink-0">
+          <button
+            type="button"
+            onClick={handleBack}
+            disabled={activeTab.historyIndex <= 0}
+            className="p-2 rounded-full text-[#5F6368] dark:text-[#9AA0A6] hover:bg-black/5 dark:hover:bg-white/10 disabled:opacity-30 cursor-pointer transition"
+            title="رجوع للخلف"
+          >
+            <ArrowRight className="w-4 h-4" />
+          </button>
+          <button
+            type="button"
+            onClick={handleForward}
+            disabled={activeTab.historyIndex >= activeTab.history.length - 1}
+            className="p-2 rounded-full text-[#5F6368] dark:text-[#9AA0A6] hover:bg-black/5 dark:hover:bg-white/10 disabled:opacity-30 cursor-pointer transition"
+            title="تقدم للأمام"
+          >
+            <ArrowLeft className="w-4 h-4" />
+          </button>
+          <button
+            type="button"
+            onClick={handleRefresh}
+            className="p-2 rounded-full text-[#5F6368] dark:text-[#9AA0A6] hover:bg-black/5 dark:hover:bg-white/10 cursor-pointer transition"
+            title="إعادة تحميل"
+          >
+            <RotateCw className={`w-4 h-4 ${activeTab.loading ? 'animate-spin text-blue-600' : ''}`} />
+          </button>
+          <button
+            type="button"
+            onClick={handleHome}
+            className="p-2 rounded-full text-[#5F6368] dark:text-[#9AA0A6] hover:bg-black/5 dark:hover:bg-white/10 cursor-pointer transition"
+            title="الصفحة الرئيسية (Google)"
+          >
+            <Home className="w-4 h-4" />
+          </button>
         </div>
-      ) : activeTab === 'pro' ? (
-        /* ═══ 2. المتصفح المتقدم والشامل (Pro Workspace) ═══ */
-        <div className="flex-1 flex flex-col overflow-hidden">
-          <AnwerBrowserWorkspace
-            activeSubView={activeSubView}
-            onChangeSubView={(view) => setActiveSubView(view)}
-            user={user}
-            watchHistory={watchHistory}
-            cloudSavedPages={cloudSavedPages}
-            onPlayTts={handlePlayTts}
-            onOpenApprovalModal={() => setIsApprovalModalOpen(true)}
+
+        {/* شريط العنوان الحقيقي Omnibox */}
+        <form
+          onSubmit={(e) => {
+            e.preventDefault();
+            navigateCurrentTab(urlInput);
+          }}
+          className="flex-1 h-[38px] px-3 rounded-full border border-[#DADCE0] dark:border-[#3C4043] focus-within:border-[#1A73E8] focus-within:shadow-xs bg-white dark:bg-[#2B2D30] flex items-center gap-2 transition"
+        >
+          <Shield className="w-4 h-4 text-emerald-600 dark:text-emerald-400 shrink-0" />
+          <input
+            type="text"
+            value={urlInput}
+            onChange={(e) => setUrlInput(e.target.value)}
+            placeholder="ابحث في Google أو اكتب عنوان موقع ويب"
+            className="flex-1 bg-transparent text-xs sm:text-sm text-[#202124] dark:text-[#E8EAED] focus:outline-none dir-ltr text-left font-mono truncate"
           />
+          <button
+            type="submit"
+            className="h-6 px-2.5 rounded-full bg-blue-600 hover:bg-blue-700 text-white font-bold text-[11px] sm:text-xs flex items-center gap-1 cursor-pointer shrink-0 transition"
+          >
+            <span>انتقال</span>
+            <ArrowLeft className="w-3 h-3" />
+          </button>
+        </form>
+
+        {/* إجراءات سريعة */}
+        <div className="flex items-center gap-1 shrink-0">
+          {/* حفظ في المحفوظات */}
+          <button
+            type="button"
+            onClick={handleToggleBookmark}
+            className={`p-2 rounded-full transition cursor-pointer ${
+              isCurrentBookmarked
+                ? 'text-[#1A73E8] fill-current bg-blue-50 dark:bg-blue-950/40'
+                : 'text-[#5F6368] hover:bg-black/5 dark:hover:bg-white/10'
+            }`}
+            title="حفظ في المحفوظات"
+          >
+            <Bookmark className="w-4 h-4" fill={isCurrentBookmarked ? 'currentColor' : 'none'} />
+          </button>
+
+          {/* استماع صوتي للمقال */}
+          {activeTab.pageData?.content_ar && (
+            <button
+              type="button"
+              onClick={() => handlePlayTts(activeTab.pageData?.content_ar || '')}
+              className="p-2 rounded-full text-[#5F6368] hover:bg-black/5 dark:hover:bg-white/10 cursor-pointer transition"
+              title="قراءة صوتية لمحتوى الصفحة"
+            >
+              <Volume2 className="w-4 h-4 text-blue-600" />
+            </button>
+          )}
+
+          {/* تبديل وضع القراءة */}
+          <button
+            type="button"
+            onClick={() => setIsReaderMode((prev) => !prev)}
+            className={`p-2 rounded-full transition cursor-pointer ${
+              isReaderMode
+                ? 'bg-blue-600 text-white'
+                : 'text-[#5F6368] hover:bg-black/5 dark:hover:bg-white/10'
+            }`}
+            title="وضع القراءة المركز"
+          >
+            <BookOpen className="w-4 h-4" />
+          </button>
+
+          {/* تبديل عرض الويب التفاعلي المباشر */}
+          {!isGoogleHome && (
+            <button
+              type="button"
+              onClick={() => setIsLiveFrameMode((prev) => !prev)}
+              className={`p-2 rounded-full transition cursor-pointer ${
+                isLiveFrameMode
+                  ? 'bg-emerald-600 text-white'
+                  : 'text-[#5F6368] hover:bg-black/5 dark:hover:bg-white/10'
+              }`}
+              title={isLiveFrameMode ? 'العودة إلى المحرك المباشر' : 'تفعيل إطار الويب الحي'}
+            >
+              <Layers className="w-4 h-4" />
+            </button>
+          )}
+
+          {/* فتح في تبويب خارجي مستقل للمواقع المقيدة */}
+          <a
+            href={activeTab.url}
+            target="_blank"
+            rel="noopener noreferrer"
+            className="p-2 rounded-full text-[#5F6368] hover:bg-black/5 dark:hover:bg-white/10 cursor-pointer transition"
+            title="فتح في نافذة متصفح مستقلة ↗"
+          >
+            <ExternalLink className="w-4 h-4" />
+          </a>
         </div>
-      ) : (
-        /* ═══ 3. حالة المستودع والنشر على Render ═══ */
-        <div className="flex-1 overflow-auto p-6 max-w-4xl mx-auto w-full">
-          <div className="bg-white rounded-2xl border border-gray-200 p-6 shadow-xs mb-6">
-            <div className="flex items-center gap-3 mb-4">
-              <div className="w-10 h-10 rounded-full bg-emerald-100 text-emerald-600 flex items-center justify-center">
-                <CheckCircle2 className="w-6 h-6" />
-              </div>
-              <div>
-                <h2 className="text-lg font-bold text-gray-900">حالة المستودع والنشر المباشر</h2>
-                <p className="text-xs text-gray-500">تم التحديث والدفع بنجاح إلى GitHub ومنصة Render</p>
-              </div>
-            </div>
+      </header>
 
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-4 mt-6">
-              <div className="border border-gray-200 rounded-xl p-4 bg-gray-50/50">
-                <div className="flex items-center justify-between mb-2">
-                  <span className="text-xs font-bold text-gray-700">المستودع الرئيسي:</span>
-                  <span className="text-[10px] bg-blue-100 text-blue-700 px-2 py-0.5 rounded-full font-mono">
-                    main branch
-                  </span>
-                </div>
-                <a
-                  href="https://github.com/anwer1230/New-browser-"
-                  target="_blank"
-                  rel="noopener noreferrer"
-                  className="text-xs text-blue-600 hover:underline font-mono flex items-center gap-1 dir-ltr"
+      {/* مؤشر شريط التحميل */}
+      {activeTab.loading && (
+        <div className="h-0.5 w-full bg-blue-100 overflow-hidden shrink-0">
+          <div className="h-full bg-blue-600 animate-pulse w-2/3" />
+        </div>
+      )}
+
+      {/* ═══════════════════════════════════════════════════════════════
+          3. مساحة التصفح المباشر الحقيقية (Real Direct Browsing Area)
+          لا وجود لأي رسائل تأكيد أو بطاقات إيقاف! التصفح مفتوح ومباشر دائماً!
+      ═══════════════════════════════════════════════════════════════ */}
+      <main className="flex-1 overflow-auto bg-white dark:bg-[#1E1F22] relative">
+        {isGoogleHome ? (
+          /* ═══ الصفحة الرئيسية المباشرة Google / AnwerBrowser ═══ */
+          <div className="w-full h-full min-h-full flex flex-col items-center justify-center p-6 bg-white dark:bg-[#1E1F22]">
+            <div className="w-full max-w-xl flex flex-col items-center text-center -mt-10">
+              <div className="text-5xl font-extrabold tracking-tight mb-6 select-none dir-ltr">
+                <span className="text-[#4285F4]">A</span>
+                <span className="text-[#EA4335]">n</span>
+                <span className="text-[#FBBC05]">w</span>
+                <span className="text-[#4285F4]">e</span>
+                <span className="text-[#34A853]">r</span>
+                <span className="text-[#EA4335]">B</span>
+                <span className="text-[#4285F4]">r</span>
+                <span className="text-[#FBBC05]">o</span>
+                <span className="text-[#34A853]">w</span>
+                <span className="text-[#EA4335]">s</span>
+                <span className="text-[#4285F4]">e</span>
+                <span className="text-[#34A853]">r</span>
+              </div>
+
+              {/* مربع البحث التفاعلي في Google */}
+              <form
+                onSubmit={(e) => {
+                  e.preventDefault();
+                  if (searchQuery.trim()) {
+                    navigateCurrentTab(
+                      `https://www.google.com/search?q=${encodeURIComponent(searchQuery.trim())}`
+                    );
+                  }
+                }}
+                className="w-full h-12 px-5 rounded-full border border-gray-300 dark:border-gray-700 shadow-xs focus-within:shadow-md focus-within:border-blue-500 flex items-center gap-3 bg-white dark:bg-[#2B2D30] transition mb-6"
+              >
+                <Search className="w-5 h-5 text-gray-400" />
+                <input
+                  type="text"
+                  value={searchQuery}
+                  onChange={(e) => setSearchQuery(e.target.value)}
+                  placeholder="ابحث في Google أو اكتب عنوان موقع ويب..."
+                  className="flex-1 bg-transparent text-sm text-[#202124] dark:text-[#E8EAED] focus:outline-none"
+                  autoFocus
+                />
+                <button
+                  type="submit"
+                  className="px-4 py-1.5 rounded-full bg-blue-600 hover:bg-blue-700 text-white text-xs font-semibold cursor-pointer transition"
                 >
-                  <span>github.com/anwer1230/New-browser-</span>
-                  <ExternalLink className="w-3 h-3" />
-                </a>
+                  بحث
+                </button>
+              </form>
+
+              {/* بطاقات الاختصارات السريعة */}
+              <div className="grid grid-cols-4 gap-3 sm:gap-4 w-full max-w-lg mb-8">
+                {quickLinks.map((item) => (
+                  <button
+                    key={item.name}
+                    type="button"
+                    onClick={() => navigateCurrentTab(item.url)}
+                    className="flex flex-col items-center gap-1.5 p-3 rounded-xl hover:bg-gray-100 dark:hover:bg-white/5 transition cursor-pointer group"
+                  >
+                    <div className="w-12 h-12 rounded-full bg-gray-100 dark:bg-white/10 group-hover:bg-blue-50 dark:group-hover:bg-blue-950/40 flex items-center justify-center text-xl shadow-xs transition">
+                      {item.icon}
+                    </div>
+                    <span className="text-xs text-gray-700 dark:text-gray-300 font-medium">
+                      {item.name}
+                    </span>
+                  </button>
+                ))}
               </div>
 
-              <div className="border border-gray-200 rounded-xl p-4 bg-gray-50/50">
-                <div className="flex items-center justify-between mb-2">
-                  <span className="text-xs font-bold text-gray-700">النشر التلقائي في Render:</span>
-                  <span className="text-[10px] bg-emerald-100 text-emerald-700 px-2 py-0.5 rounded-full font-bold">
-                    autoDeploy: true
-                  </span>
-                </div>
-                <p className="text-xs text-gray-600">
-                  خدمة Node.js (`anwerbrowser`) وخادم Python (`anwerbrowser-python-api`)
-                </p>
+              <div className="px-4 py-2 rounded-full bg-emerald-50 dark:bg-emerald-950/40 border border-emerald-200 dark:border-emerald-800 text-emerald-800 dark:text-emerald-300 text-xs flex items-center gap-2">
+                <CheckCircle2 className="w-4 h-4 text-emerald-600" />
+                <span>متصفح مباشر وتبويبات مستقلة حقيقية: المواقع تفتح دائماً بكامل محتواها.</span>
               </div>
             </div>
+          </div>
+        ) : isLiveFrameMode ? (
+          /* ═══ وضع إطار الويب الحي المباشر (Live Proxy Frame) ═══ */
+          <iframe
+            key={`${activeTab.id}_${activeTab.url}`}
+            title={activeTab.title || 'AnwerBrowser Live View'}
+            src={`/api/web-proxy?url=${encodeURIComponent(activeTab.url)}&in_browser_frame=1`}
+            className="w-full h-full border-0 bg-white dark:bg-[#1E1F22]"
+            sandbox="allow-scripts allow-same-origin allow-forms allow-popups allow-modals allow-presentation allow-downloads allow-pointer-lock"
+            allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture; web-share; fullscreen"
+          />
+        ) : (
+          /* ═══ التصفح المباشر الكامل التفاعلي (Direct In-App Webpage) ═══ */
+          <div className="w-full h-full overflow-y-auto bg-[#F8F9FA] dark:bg-[#1E1F22] p-4 sm:p-6">
+            <div className={`max-w-4xl mx-auto space-y-5 ${isReaderMode ? 'max-w-2xl' : ''}`}>
+              {/* شريط معلومات الموقع وأدوات التنقل */}
+              {!isReaderMode && (
+                <div className="bg-white dark:bg-[#2B2D30] rounded-2xl p-4 border border-gray-200 dark:border-gray-800 shadow-xs flex flex-wrap items-center justify-between gap-3">
+                  <div className="flex items-center gap-3">
+                    <div className="w-10 h-10 rounded-full bg-blue-100 dark:bg-blue-900/40 text-blue-600 dark:text-blue-400 flex items-center justify-center shrink-0">
+                      <Globe className="w-5 h-5" />
+                    </div>
+                    <div>
+                      <h2 className="text-base font-bold text-gray-900 dark:text-white line-clamp-1">
+                        {activeTab.pageData?.title || activeTab.title || activeTab.url}
+                      </h2>
+                      <div className="flex items-center gap-2 text-xs text-gray-500 dark:text-gray-400">
+                        <span className="font-mono dir-ltr">{activeTab.url}</span>
+                        <span className="text-emerald-600 font-semibold">• تصفح مباشر 🟢</span>
+                      </div>
+                    </div>
+                  </div>
 
-            <div className="mt-6 border-t border-gray-100 pt-4">
-              <h4 className="text-xs font-bold text-gray-700 mb-3">آخر التحديثات التي تم دفعها:</h4>
-              <div className="space-y-2">
-                <div className="flex items-start gap-2 p-3 rounded-lg bg-gray-50 text-xs">
-                  <GitBranch className="w-4 h-4 text-emerald-600 shrink-0 mt-0.5" />
-                  <div className="flex-1">
-                    <span className="font-bold text-gray-900">Commit 87242b3: </span>
-                    <span className="text-gray-700">
-                      تشغيل محرك التصفح المباشر داخل التطبيق بدون قيود الآي فريم وإعداد تطبيق الأندرويد الأصلي.
-                    </span>
+                  <div className="flex items-center gap-2">
+                    <button
+                      type="button"
+                      onClick={() => setIsLiveFrameMode(true)}
+                      className="px-3 py-1.5 rounded-lg bg-gray-100 hover:bg-gray-200 dark:bg-white/10 dark:hover:bg-white/20 text-xs font-semibold text-gray-700 dark:text-gray-200 flex items-center gap-1.5 transition cursor-pointer"
+                    >
+                      <Layers className="w-3.5 h-3.5" />
+                      <span>عرض الإطار الحي</span>
+                    </button>
+                    <a
+                      href={activeTab.url}
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      className="px-3 py-1.5 rounded-lg bg-blue-600 hover:bg-blue-700 text-xs font-semibold text-white flex items-center gap-1.5 transition shadow-xs"
+                    >
+                      <span>فتح مباشر ↗</span>
+                    </a>
                   </div>
                 </div>
-                <div className="flex items-start gap-2 p-3 rounded-lg bg-gray-50 text-xs">
-                  <GitBranch className="w-4 h-4 text-emerald-600 shrink-0 mt-0.5" />
-                  <div className="flex-1">
-                    <span className="font-bold text-gray-900">Commit 142e962: </span>
-                    <span className="text-gray-700">
-                      تغيير اسم التطبيق بالكامل من Hybrid إلى AnwerBrowser في كافة الملفات وتفعيل النشر التلقائي.
-                    </span>
+              )}
+
+              {/* اكتشاف الفيديوهات وتشغيلها المباشر */}
+              {Array.isArray(activeTab.pageData?.discovered_videos) &&
+                activeTab.pageData.discovered_videos.length > 0 && (
+                  <div className="bg-white dark:bg-[#2B2D30] rounded-2xl p-4 border border-gray-200 dark:border-gray-800 shadow-xs">
+                    <div className="flex items-center gap-2 mb-3">
+                      <Film className="w-4 h-4 text-rose-500" />
+                      <h3 className="text-sm font-bold text-gray-900 dark:text-white">
+                        فيديوهات تم اكتشافها في الصفحة:
+                      </h3>
+                    </div>
+                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                      {activeTab.pageData.discovered_videos.slice(0, 2).map((vid: any) => (
+                        <div
+                          key={vid.id}
+                          className="rounded-xl overflow-hidden border border-gray-200 dark:border-gray-700 bg-black"
+                        >
+                          {vid.stream_url ? (
+                            <video
+                              src={vid.stream_url}
+                              poster={vid.thumbnail}
+                              controls
+                              className="w-full h-44 object-cover"
+                            />
+                          ) : null}
+                          <div className="p-2.5 bg-white dark:bg-[#2B2D30]">
+                            <p className="text-xs font-bold line-clamp-1">{vid.title}</p>
+                          </div>
+                        </div>
+                      ))}
+                    </div>
                   </div>
+                )}
+
+              {/* نص ومحتوى الموقع المترجم والمنسق */}
+              <div className="bg-white dark:bg-[#2B2D30] rounded-2xl p-6 border border-gray-200 dark:border-gray-800 shadow-xs">
+                <div className="flex items-center justify-between mb-4 border-b border-gray-100 dark:border-gray-800 pb-3">
+                  <div className="flex items-center gap-2">
+                    <BookOpen className="w-4 h-4 text-blue-600" />
+                    <h3 className="text-sm font-bold text-gray-900 dark:text-white">
+                      محتوى الصفحة المقروء والمترجم:
+                    </h3>
+                  </div>
+                  {activeTab.pageData?.content_ar && (
+                    <button
+                      type="button"
+                      onClick={() => handlePlayTts(activeTab.pageData?.content_ar || '')}
+                      className="text-xs text-blue-600 hover:underline flex items-center gap-1 cursor-pointer"
+                    >
+                      <Volume2 className="w-3.5 h-3.5" />
+                      <span>قراءة صوتية</span>
+                    </button>
+                  )}
                 </div>
-                <div className="flex items-start gap-2 p-3 rounded-lg bg-gray-50 text-xs">
-                  <GitBranch className="w-4 h-4 text-emerald-600 shrink-0 mt-0.5" />
-                  <div className="flex-1">
-                    <span className="font-bold text-gray-900">Commit 9915d8a: </span>
-                    <span className="text-gray-700">
-                      إصلاح مشكلة التكرار الثلاثي للأشرطة، وتركيب قاطع التضمين المتداخل، وإصلاح خادم البروكسي.
-                    </span>
-                  </div>
+
+                <div className="text-sm leading-relaxed text-gray-800 dark:text-gray-200 whitespace-pre-line space-y-3 font-sans">
+                  {activeTab.pageData?.content_ar ||
+                    activeTab.pageData?.raw_snippet ||
+                    `جاري عرض محتوى الموقع: ${activeTab.url}`}
                 </div>
               </div>
+
+              {/* الروابط التفاعلية التابعة للموقع (اضغط للانتقال المباشر في التبويب) */}
+              {Array.isArray(activeTab.pageData?.extracted_links) &&
+                activeTab.pageData.extracted_links.length > 0 && (
+                  <div className="bg-white dark:bg-[#2B2D30] rounded-2xl p-5 border border-gray-200 dark:border-gray-800 shadow-xs">
+                    <div className="flex items-center gap-2 mb-3">
+                      <Sparkles className="w-4 h-4 text-amber-500" />
+                      <h3 className="text-sm font-bold text-gray-900 dark:text-white">
+                        صفحات ومقالات تابعة للموقع (اضغط للتنقل المباشر):
+                      </h3>
+                    </div>
+
+                    <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 gap-2.5">
+                      {activeTab.pageData.extracted_links.map((link: any, idx: number) => (
+                        <button
+                          key={idx}
+                          type="button"
+                          onClick={() => navigateCurrentTab(link.url)}
+                          className="p-3 rounded-xl border border-gray-200 dark:border-gray-700/60 hover:border-blue-500 hover:bg-blue-50/50 dark:hover:bg-blue-950/20 text-right transition cursor-pointer flex flex-col justify-between"
+                        >
+                          <span className="text-xs font-bold text-gray-900 dark:text-white line-clamp-2 mb-1">
+                            {link.title}
+                          </span>
+                          <span className="text-[10px] text-blue-600 font-mono truncate dir-ltr text-left">
+                            {link.url}
+                          </span>
+                        </button>
+                      ))}
+                    </div>
+                  </div>
+                )}
+            </div>
+          </div>
+        )}
+      </main>
+
+      {/* ═══════════════════════════════════════════════════════════════
+          4. الشريط السفلي الموحّد للمتصفح
+      ═══════════════════════════════════════════════════════════════ */}
+      <footer className="h-[52px] bg-[#F8F9FA] dark:bg-[#1E1F22] border-t border-[#E8EAED] dark:border-[#2B2D30] flex items-center justify-evenly shrink-0 z-20">
+        <button
+          type="button"
+          onClick={handleBack}
+          disabled={activeTab.historyIndex <= 0}
+          className="p-3 text-[#5F6368] dark:text-[#9AA0A6] hover:bg-black/5 dark:hover:bg-white/10 disabled:opacity-30 rounded-full cursor-pointer transition"
+          title="رجوع"
+        >
+          <ArrowRight className="w-5 h-5" />
+        </button>
+        <button
+          type="button"
+          onClick={handleForward}
+          disabled={activeTab.historyIndex >= activeTab.history.length - 1}
+          className="p-3 text-[#5F6368] dark:text-[#9AA0A6] hover:bg-black/5 dark:hover:bg-white/10 disabled:opacity-30 rounded-full cursor-pointer transition"
+          title="تقدم"
+        >
+          <ArrowLeft className="w-5 h-5" />
+        </button>
+        <button
+          type="button"
+          onClick={handleHome}
+          className="p-3 text-[#5F6368] dark:text-[#9AA0A6] hover:bg-black/5 dark:hover:bg-white/10 rounded-full cursor-pointer transition"
+          title="الرئيسية (Google)"
+        >
+          <Home className="w-5 h-5" />
+        </button>
+        <button
+          type="button"
+          onClick={() => setIsBookmarksOpen(true)}
+          className="p-3 text-[#5F6368] dark:text-[#9AA0A6] hover:bg-black/5 dark:hover:bg-white/10 rounded-full cursor-pointer transition relative"
+          title="المحفوظات"
+        >
+          <Bookmark className="w-5 h-5" />
+          {bookmarks.length > 0 && (
+            <span className="absolute top-2 left-2 w-2 h-2 rounded-full bg-blue-600" />
+          )}
+        </button>
+        <button
+          type="button"
+          onClick={() => setIsHistoryOpen(true)}
+          className="p-3 text-[#5F6368] dark:text-[#9AA0A6] hover:bg-black/5 dark:hover:bg-white/10 rounded-full cursor-pointer transition"
+          title="سجل التصفح"
+        >
+          <History className="w-5 h-5" />
+        </button>
+        <button
+          type="button"
+          onClick={() => createNewTab('https://www.google.com')}
+          className="p-2.5 rounded-full bg-blue-600 text-white hover:bg-blue-700 cursor-pointer transition shadow-xs flex items-center gap-1 px-3 text-xs font-bold"
+          title="تبويب جديد"
+        >
+          <Plus className="w-4 h-4" />
+          <span className="hidden sm:inline">تبويب جديد</span>
+        </button>
+      </footer>
+
+      {/* ═══════════════════════════════════════════════════════════════
+          5. درج المحفوظات (Bookmarks Drawer)
+      ═══════════════════════════════════════════════════════════════ */}
+      {isBookmarksOpen && (
+        <div
+          className="fixed inset-0 z-50 bg-black/40 flex justify-end"
+          onClick={() => setIsBookmarksOpen(false)}
+        >
+          <div
+            onClick={(e) => e.stopPropagation()}
+            className="w-full max-w-sm h-full bg-white dark:bg-[#2B2D30] shadow-2xl flex flex-col"
+          >
+            <div className="p-4 border-b border-gray-200 dark:border-gray-800 flex items-center justify-between">
+              <div className="flex items-center gap-2">
+                <Bookmark className="w-5 h-5 text-blue-600" />
+                <h3 className="font-bold text-sm">المحفوظات ({bookmarks.length})</h3>
+              </div>
+              <button
+                type="button"
+                onClick={() => setIsBookmarksOpen(false)}
+                className="p-1 rounded-full hover:bg-gray-100 dark:hover:bg-white/10"
+              >
+                <X className="w-5 h-5" />
+              </button>
+            </div>
+            <div className="flex-1 overflow-y-auto p-4 space-y-2">
+              {bookmarks.length === 0 ? (
+                <div className="text-center py-10 text-gray-400 text-xs">لا توجد مواقع محفوظة بعد</div>
+              ) : (
+                bookmarks.map((b, idx) => (
+                  <div
+                    key={idx}
+                    onClick={() => {
+                      navigateCurrentTab(b.url);
+                      setIsBookmarksOpen(false);
+                    }}
+                    className="p-3 rounded-xl border border-gray-100 dark:border-gray-800 hover:bg-gray-50 dark:hover:bg-white/5 cursor-pointer transition flex items-center justify-between"
+                  >
+                    <div className="truncate flex-1">
+                      <div className="text-xs font-bold truncate">{b.title}</div>
+                      <div className="text-[10px] text-gray-400 font-mono truncate dir-ltr text-left">
+                        {b.url}
+                      </div>
+                    </div>
+                    <button
+                      type="button"
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        setBookmarks((prev) => prev.filter((item) => item.url !== b.url));
+                      }}
+                      className="text-gray-400 hover:text-red-500 p-1"
+                    >
+                      <X className="w-3.5 h-3.5" />
+                    </button>
+                  </div>
+                ))
+              )}
             </div>
           </div>
         </div>
       )}
 
-      <InfrastructureApprovalModal
-        isOpen={isApprovalModalOpen}
-        onClose={() => setIsApprovalModalOpen(false)}
-        user={user}
-        hasExistingDoc={hasExistingInfraDoc}
-        onProvisionComplete={() => {}}
-      />
+      {/* ═══════════════════════════════════════════════════════════════
+          6. درج سجل التصفح (History Drawer)
+      ═══════════════════════════════════════════════════════════════ */}
+      {isHistoryOpen && (
+        <div
+          className="fixed inset-0 z-50 bg-black/40 flex justify-end"
+          onClick={() => setIsHistoryOpen(false)}
+        >
+          <div
+            onClick={(e) => e.stopPropagation()}
+            className="w-full max-w-sm h-full bg-white dark:bg-[#2B2D30] shadow-2xl flex flex-col"
+          >
+            <div className="p-4 border-b border-gray-200 dark:border-gray-800 flex items-center justify-between">
+              <div className="flex items-center gap-2">
+                <History className="w-5 h-5 text-blue-600" />
+                <h3 className="font-bold text-sm">سجل التصفح ({browseHistory.length})</h3>
+              </div>
+              <button
+                type="button"
+                onClick={() => setIsHistoryOpen(false)}
+                className="p-1 rounded-full hover:bg-gray-100 dark:hover:bg-white/10"
+              >
+                <X className="w-5 h-5" />
+              </button>
+            </div>
+            <div className="flex-1 overflow-y-auto p-4 space-y-2">
+              {browseHistory.length === 0 ? (
+                <div className="text-center py-10 text-gray-400 text-xs">السجل فارغ</div>
+              ) : (
+                browseHistory.map((h, idx) => (
+                  <div
+                    key={idx}
+                    onClick={() => {
+                      navigateCurrentTab(h.url);
+                      setIsHistoryOpen(false);
+                    }}
+                    className="p-3 rounded-xl border border-gray-100 dark:border-gray-800 hover:bg-gray-50 dark:hover:bg-white/5 cursor-pointer transition flex items-center justify-between"
+                  >
+                    <div className="truncate flex-1">
+                      <div className="text-xs font-bold truncate">{h.title}</div>
+                      <div className="text-[10px] text-gray-400 font-mono truncate dir-ltr text-left">
+                        {h.url}
+                      </div>
+                    </div>
+                    <span className="text-[9px] text-gray-400">{h.date}</span>
+                  </div>
+                ))
+              )}
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Snackbar الإشعار السريع */}
+      {toastMsg && (
+        <div className="fixed bottom-16 right-4 left-4 sm:left-auto sm:right-6 z-50 pointer-events-none flex justify-center">
+          <div className="px-4 py-2.5 rounded-xl bg-[#202124] text-white text-xs shadow-lg flex items-center gap-2">
+            <span>{toastMsg}</span>
+          </div>
+        </div>
+      )}
     </div>
   );
 }
