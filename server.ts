@@ -2627,6 +2627,27 @@ ${trimmed.slice(0, 12000)}`;
         const searchQ = u.searchParams.get('q') || '';
         if (searchQ) {
           const results = await performLiveMultiSourceWebSearch(searchQ);
+          const resultsAr = results.results_ar && results.results_ar.length > 0 ? results.results_ar : results.filter((r) => r.lang === 'ar');
+          const resultsEn = results.results_en && results.results_en.length > 0 ? results.results_en : results.filter((r) => r.lang === 'en');
+          const queryAr = results.query_ar || searchQ;
+          const queryEn = results.query_en || searchQ;
+          const arCount = results.ar_count || resultsAr.length;
+          const enCount = results.en_count || resultsEn.length;
+          const totalCount = results.total_count || (arCount + enCount);
+          const aiOverview = results.ai_overview || {
+            summary_ar: `نتائج بحث شاملة عن «${searchQ}» تم تنظيمها وترتيبها باللغة العربية أولاً ثم باللغة الإنجليزية لكافة المصادر.`,
+            key_points_ar: [
+              `معلومات موثقة ومحدثة حول «${searchQ}» من مصادر متعددة.`,
+              `عرض تدريجي يبدأ بالنتائج المعربة ثم المصادر العالمية بالإنجليزية.`,
+              `إمكانية تشغيل الفيديوهات وحفظ النتائج بدون إنترنت.`
+            ],
+            summary_en: `Comprehensive live search results for "${searchQ}".`,
+            key_points_en: [`Verified data and articles for "${searchQ}".`]
+          };
+          const relatedSearches = results.related_searches && results.related_searches.length > 0
+            ? results.related_searches
+            : [`${searchQ} ويكيبيديا`, `${searchQ} English overview`, `${searchQ} معلومات وتفاصيل`, `${searchQ} official site`];
+
           const safeQ = searchQ.replace(/"/g, '&quot;');
           const qLower = searchQ.toLowerCase().trim();
 
@@ -2653,7 +2674,7 @@ ${trimmed.slice(0, 12000)}`;
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1">
-  <title>${searchQ} - بحث Google</title>
+  <title>${searchQ} - بحث Google (العربية أولاً ثم الإنجليزية)</title>
   <style>
     * { box-sizing: border-box; -webkit-tap-highlight-color: transparent; }
     body {
@@ -2951,6 +2972,76 @@ ${trimmed.slice(0, 12000)}`;
     .web-title a:hover { text-decoration: underline; }
     .web-snippet {
       margin: 0; font-size: 13.5px; color: #4D5156; line-height: 1.6;
+    }
+
+    /* ═══ شريط ترتيب وتدفق اللغات (العربية أولاً ثم الإنجليزية) ═══ */
+    .lang-stream-banner {
+      background: #F8F9FA; border: 1px solid #DADCE0; border-radius: 16px;
+      padding: 12px 14px; margin: 12px 0 16px; box-shadow: 0 1px 4px rgba(0,0,0,0.04);
+    }
+    .lang-stream-header {
+      display: flex; align-items: center; justify-content: space-between; flex-wrap: wrap; gap: 8px; margin-bottom: 10px;
+    }
+    .lang-stream-status {
+      display: flex; align-items: center; gap: 8px; font-size: 13.5px; color: #202124;
+    }
+    .pulse-indicator {
+      width: 10px; height: 10px; border-radius: 50%; background: #34A853;
+      box-shadow: 0 0 0 rgba(52,168,83,0.4); animation: pulseGreen 1.8s infinite; flex-shrink: 0;
+    }
+    @keyframes pulseGreen {
+      0% { box-shadow: 0 0 0 0 rgba(52,168,83,0.7); }
+      70% { box-shadow: 0 0 0 8px rgba(52,168,83,0); }
+      100% { box-shadow: 0 0 0 0 rgba(52,168,83,0); }
+    }
+    .lang-counts-pill {
+      display: flex; align-items: center; gap: 6px; font-size: 11.5px;
+      background: #fff; padding: 4px 10px; border-radius: 20px; border: 1px solid #E8EAED; color: #5F6368;
+    }
+    .count-ar { color: #137333; font-weight: bold; }
+    .count-en { color: #1A73E8; font-weight: bold; }
+    .count-total { color: #202124; font-weight: bold; }
+    .sep-dot { color: #BDC1C6; }
+    .lang-filter-bar {
+      display: flex; align-items: center; gap: 8px; overflow-x: auto; padding-bottom: 2px;
+    }
+    .lang-filter-btn {
+      background: #FFFFFF; border: 1px solid #DADCE0; color: #3C4043;
+      border-radius: 20px; padding: 6px 14px; font-size: 12.5px; font-weight: 500;
+      cursor: pointer; display: inline-flex; align-items: center; gap: 6px; white-space: nowrap; transition: all 0.15s;
+    }
+    .lang-filter-btn.active {
+      background: #E8F0FE; color: #1A73E8; border-color: #1A73E8; font-weight: 700;
+    }
+    .lang-filter-btn:hover { background: #F1F3F4; }
+    
+    .results-group {
+      margin-bottom: 22px; transition: opacity 0.3s ease;
+    }
+    .group-header {
+      display: flex; align-items: center; justify-content: space-between;
+      border-radius: 12px; padding: 8px 14px; margin-bottom: 12px;
+      font-size: 13.5px; font-weight: 700;
+    }
+    .group-header.ar-header { background: #E6F4EA; color: #137333; border: 1px solid #CEEAD6; }
+    .group-header.en-header { background: #E8F0FE; color: #1A73E8; border: 1px solid #D2E3FC; }
+    .badge-lang-ar {
+      background: #E6F4EA; color: #137333; font-weight: 700; font-size: 10.5px;
+      padding: 2px 8px; border-radius: 12px; border: 1px solid #CEEAD6; margin-right: auto;
+    }
+    .badge-lang-en {
+      background: #E8F0FE; color: #1A73E8; font-weight: 700; font-size: 10.5px;
+      padding: 2px 8px; border-radius: 12px; border: 1px solid #D2E3FC; margin-right: auto;
+    }
+    .orig-title-hint {
+      font-size: 12px; color: #5F6368; margin-top: 2px; direction: ltr; text-align: right;
+    }
+    .ar-trans-hint {
+      font-size: 12.5px; color: #137333; background: #F6FCF7; padding: 6px 10px;
+      border-radius: 8px; margin-top: 8px; border-right: 3px solid #34A853; line-height: 1.4;
+    }
+    .ar-badge-pill {
+      font-size: 11px; background: #E6F4EA; color: #137333; padding: 2px 6px; border-radius: 6px; font-weight: bold;
     }
 
     /* ═══ 8. قسم "تم البحث أيضًا عن" (Related Searches) ═══ */
@@ -3286,36 +3377,41 @@ ${trimmed.slice(0, 12000)}`;
   <!-- الحاوية الرئيسية للنتائج -->
   <main class="main-container">
 
-    <!-- 4. نظرة عامة بالذكاء الاصطناعي (AI Overview) -->
+    <!-- 4. نظرة عامة بالذكاء الاصطناعي (AI Overview ثنائي اللغة: عربي أولاً ثم إنجليزي) -->
     <section class="ai-overview-card" id="ai-overview-section">
       <div class="ai-header">
         <div class="ai-badge">
           <span class="ai-sparkle">✨</span>
           <span>نظرة عامة بالذكاء الاصطناعي (AI Overview)</span>
         </div>
-        <span style="font-size: 11.5px; color: #5F6368;">Gemini AI • توليد فوري</span>
+        <span style="font-size: 11.5px; color: #5F6368;">Gemini AI • ملخص فوري بالاسم</span>
       </div>
       <p class="ai-summary-text" id="ai-main-text">
-        بحثك عن «<b>${searchQ}</b>» يتطابق مع تصنيف الوسائط المتعددة والموسيقى والفيديوهات الأكثر شعبية عالمياً، مع توفر المقاطع بجودة عالية وخيارات التشغيل والحفظ للمشاهدة بدون إنترنت.
+        ${aiOverview.summary_ar}
       </p>
-      <ul class="ai-points">
-        <li><b>أفضل الأعمال والقوائم:</b> تتوفر ألبومات ومجموعات رسمية لأشهر الأغاني عبر YouTube وSpotify وApple Music.</li>
-        <li><b>تطبيقات البث:</b> يمكنك الاستماع والتعرف التلقائي على الموسيقى باستخدام تطبيقات مثل Shazam وSpotify.</li>
-        <li><b>حفظ وسجل حقيقي:</b> عند مشاهدة أي فيديو، يتم أرشفته تلقائياً في السجل وفي قواعد البيانات الخمس للرجوع إليه أوفلاين.</li>
+      <ul class="ai-points" id="ai-points-list">
+        ${aiOverview.key_points_ar.map((pt) => `<li>${pt}</li>`).join('\n')}
       </ul>
       <div class="ai-actions-row">
         <button type="button" class="ai-btn-action" onclick="expandAiAnswer()">
-          <span>✨</span><span>توسيع الإجابة بالذكاء الاصطناعي</span>
+          <span>✨</span><span>تحليل موسع</span>
+        </button>
+        <button type="button" class="ai-btn-action" onclick="toggleAiEnglishOverview()">
+          <span>🌐</span><span>English Overview (الملخص الإنجليزي)</span>
         </button>
         <button type="button" class="ai-btn-action" onclick="speakAiAnswer()">
           <span>🔊</span><span>استماع صوتي</span>
         </button>
-        <button type="button" class="ai-btn-action" onclick="window.parent.postMessage({type:'HYBRID_BROWSER_NAVIGATE', url:'https://www.google.com/search?q=${encodeURIComponent(searchQ + ' lyrics')}'}, '*')">
-          <span>🔍</span><span>كلمات الأغاني (Lyrics)</span>
-        </button>
       </div>
       <div id="ai-expanded-box" style="display:none;margin-top:12px;padding-top:12px;border-top:1px solid #D2E3FC;font-size:13.5px;color:#202124;line-height:1.6;">
-        <b>تحليل نية البحث المعمّق:</b> استعلام «${searchQ}» يشمل تصنيفات متعددة، بدءاً من أحدث الإصدارات العالمية 2026 وقوائم Top 100، إلى الأعمال الكلاسيكية. المتصفح يمنحك سرعة فائقة في البث مع إمكانية التشغيل في الخلفية وحفظ الفيديو مباشرة بدون انقطاع حتى مع أضعف سرعات الإنترنت.
+        <b>تحليل نية البحث المعمّق:</b> استعلام «${searchQ}» (${queryAr !== searchQ ? queryAr + ' · ' : ''}${queryEn}) يغطي نتائج شاملة تبدأ باللغة العربية أولاً ومترجمة بدقة، وتليها المصادر الإنجليزية والعالمية لإتاحة الوصول لكافة المعلومات والروابط الموثوقة.
+      </div>
+      <div id="ai-en-overview-box" style="display:none;margin-top:12px;padding-top:12px;border-top:1px solid #D2E3FC;font-size:13px;color:#202124;line-height:1.6;direction:ltr;text-align:left;">
+        <div style="font-weight:700;color:#1A73E8;margin-bottom:6px;">🌐 English Executive Summary for "${queryEn}":</div>
+        <div>${aiOverview.summary_en}</div>
+        <ul style="margin:8px 0 0 16px;padding:0;color:#3C4043;">
+          ${aiOverview.key_points_en.map((pt) => `<li>${pt}</li>`).join('\n')}
+        </ul>
       </div>
     </section>
 
@@ -3518,44 +3614,88 @@ ${trimmed.slice(0, 12000)}`;
       </div>
     </section>
 
-    <!-- 7. نتائج الويب العضوية (Organic Web Results) -->
+    <!-- 7. نتائج الويب: تبدأ بالظهور حسب ترجمتها للعربية ثم الإنجليزية لتشمل كافة النتائج -->
     <section id="web-section">
       <div class="section-title-row">
         <div class="section-title">
           <span>🌐</span>
-          <span>نتائج الويب</span>
+          <span>نتائج الويب (مرتبة: العربية أولاً ثم الإنجليزية)</span>
+        </div>
+      </div>
+
+      <!-- شريط تدفق وترتيب اللغات: العربية أولاً ثم الإنجليزية -->
+      <div class="lang-stream-banner" id="lang-stream-banner">
+        <div class="lang-stream-header">
+          <div class="lang-stream-status">
+            <span class="pulse-indicator"></span>
+            <span><b>نتائج البحث المباشر عن «${searchQ}»</b></span>
+            ${queryAr !== searchQ ? `<span style="font-size:12px;color:#5F6368;">(${queryAr})</span>` : ''}
+          </div>
+          <div class="lang-counts-pill">
+            <span class="count-ar">🇸🇦 ${arCount} بالعربية أولاً</span>
+            <span class="sep-dot">•</span>
+            <span class="count-en">🌐 ${enCount} بالإنجليزية</span>
+            <span class="sep-dot">•</span>
+            <span class="count-total">الإجمالي: ${totalCount} نتيجة</span>
+          </div>
+        </div>
+        <div class="lang-filter-bar">
+          <button type="button" class="lang-filter-btn active" id="filter-all-btn" onclick="filterLanguage('all', this)">
+            <span>📑</span><span>الكل (العربية أولاً ثم الإنجليزية · ${totalCount})</span>
+          </button>
+          <button type="button" class="lang-filter-btn" id="filter-ar-btn" onclick="filterLanguage('ar', this)">
+            <span>🇸🇦</span><span>النتائج العربية والمترجمة (${arCount})</span>
+          </button>
+          <button type="button" class="lang-filter-btn" id="filter-en-btn" onclick="filterLanguage('en', this)">
+            <span>🌐</span><span>المصادر الإنجليزية والعالمية (${enCount})</span>
+          </button>
         </div>
       </div>
 
       <div class="web-results-list">
-        <!-- نتيجة 1: Spotify Playlist -->
-        <div class="web-card">
-          <div class="web-cite">
-            <span class="web-favicon">🟢</span>
-            <span class="web-domain">open.spotify.com</span>
-            <span class="web-url-text" dir="ltr">https://open.spotify.com/playlist/37i9dQZF1DXcBWIGoYBM5M</span>
+        <!-- 🇸🇦 المجموعة الأولى: النتائج باللغة العربية ومترجمة فورياً (تبدأ بالظهور أولاً) -->
+        <div class="results-group group-ar" id="group-ar-results">
+          <div class="group-header ar-header">
+            <span>🇸🇦 1. النتائج باللغة العربية ومترجمة فورياً (تبدأ بالظهور أولاً · ${arCount} نتيجة)</span>
+            <span class="ar-badge-pill">مترجم ومعرب ✓</span>
           </div>
-          <h3 class="web-title">
-            <a href="https://open.spotify.com">BEST SONGS OF ALL TIME - Top Global Playlist</a>
-          </h3>
-          <p class="web-snippet">
-            استمع لأفضل وأشهر الأغاني عبر التاريخ مجتمعة في قائمة تشغيل واحدة تضم أعمال كبار الفنانين، مع قوائم الأغاني الإنجليزية والعربية الأكثر شعبية.
-          </p>
+          ${resultsAr.map((r) => `
+          <div class="web-card ar-card" data-lang="ar">
+            <div class="web-cite">
+              <span class="web-favicon">🌐</span>
+              <span class="web-domain">${r.domain}</span>
+              <span class="web-url-text" dir="ltr">${r.url}</span>
+              <span class="badge-lang-ar">🇸🇦 بالعربية</span>
+            </div>
+            <h3 class="web-title">
+              <a href="${r.url}">${r.title_ar || r.title}</a>
+            </h3>
+            ${r.title && r.title !== r.title_ar ? `<div class="orig-title-hint">العنوان الأصلي: ${r.title}</div>` : ''}
+            <p class="web-snippet">${r.snippet_ar || r.snippet}</p>
+          </div>`).join('\n')}
         </div>
 
-        <!-- النتائج الحية الإضافية المترجمة للعربية -->
-        ${results.map((r) => `
-        <div class="web-card">
-          <div class="web-cite">
-            <span class="web-favicon">🌐</span>
-            <span class="web-domain">${r.domain}</span>
-            <span class="web-url-text" dir="ltr">${r.url}</span>
+        <!-- 🌐 المجموعة الثانية: النتائج باللغة الإنجليزية والمصادر العالمية (تليها لإكمال كافة النتائج) -->
+        <div class="results-group group-en" id="group-en-results">
+          <div class="group-header en-header">
+            <span>🌐 2. النتائج باللغة الإنجليزية والمصادر العالمية (تليها لإكمال كافة النتائج · ${enCount} نتيجة)</span>
+            <span style="font-size:11px;background:#E8F0FE;color:#1A73E8;padding:2px 6px;border-radius:6px;font-weight:bold;">English Sources</span>
           </div>
-          <h3 class="web-title">
-            <a href="${r.url}">${r.title_ar || r.title}</a>
-          </h3>
-          <p class="web-snippet">${r.snippet_ar || r.snippet}</p>
-        </div>`).join('\n')}
+          ${resultsEn.map((r) => `
+          <div class="web-card en-card" data-lang="en">
+            <div class="web-cite">
+              <span class="web-favicon">🌐</span>
+              <span class="web-domain">${r.domain}</span>
+              <span class="web-url-text" dir="ltr">${r.url}</span>
+              <span class="badge-lang-en">🌐 English</span>
+            </div>
+            <h3 class="web-title">
+              <a href="${r.url}">${r.title || r.title_en || r.title_ar}</a>
+            </h3>
+            <p class="web-snippet" dir="ltr">${r.snippet || r.snippet_en || ''}</p>
+            ${r.snippet_ar && r.snippet_ar !== r.snippet ? `<div class="ar-trans-hint"><b>ترجمة فورية للعربية:</b> ${r.snippet_ar}</div>` : ''}
+          </div>`).join('\n')}
+        </div>
       </div>
     </section>
 
@@ -3710,15 +3850,13 @@ ${trimmed.slice(0, 12000)}`;
     <section class="related-wrap" id="related-section">
       <h3 class="related-title">
         <span>🔍</span>
-        <span>تم البحث أيضًا عن (Related Searches)</span>
+        <span>تم البحث أيضًا عن (Related Searches بالاسم والموضوع)</span>
       </h3>
       <div class="related-chips">
-        <a class="related-chip" href="https://www.google.com/search?q=A+lot+of+songs"><span>🔎</span><span>A lot of songs</span></a>
-        <a class="related-chip" href="https://www.google.com/search?q=Songs+English"><span>🔎</span><span>Songs English</span></a>
-        <a class="related-chip" href="https://www.google.com/search?q=Songs+popular"><span>🔎</span><span>Songs popular</span></a>
-        <a class="related-chip" href="https://www.google.com/search?q=Best+songs+of+all+time"><span>🔎</span><span>Best songs of all time</span></a>
-        <a class="related-chip" href="https://www.google.com/search?q=%D8%A3%D8%AC%D9%85%D9%84+%D8%A3%D8%BA%D8%A7%D9%86%D9%8A+%D9%83%D9%84%D8%A7%D8%B3%D9%8A%D9%83%D9%8A%D8%A9"><span>🔎</span><span>أجمل أغاني كلاسيكية</span></a>
-        <a class="related-chip" href="https://www.google.com/search?q=Top+trending+music+2026"><span>🔎</span><span>Top trending music 2026</span></a>
+        ${relatedSearches.map((q) => `
+        <a class="related-chip" href="https://www.google.com/search?q=${encodeURIComponent(q)}" onclick="event.preventDefault(); window.parent.postMessage({type:'HYBRID_BROWSER_NAVIGATE', url:'https://www.google.com/search?q=${encodeURIComponent(q)}'}, '*')">
+          <span>🔎</span><span>${q}</span>
+        </a>`).join('\n')}
       </div>
     </section>
 
@@ -3959,6 +4097,38 @@ ${trimmed.slice(0, 12000)}`;
     function expandAiAnswer() {
       var box = document.getElementById('ai-expanded-box');
       if (box) box.style.display = 'block';
+    }
+
+    function toggleAiEnglishOverview() {
+      var enBox = document.getElementById('ai-en-overview-box');
+      if (!enBox) return;
+      enBox.style.display = enBox.style.display === 'none' ? 'block' : 'none';
+    }
+
+    // تصفية النتائج حسب اللغة: الكل (عربي أولاً ثم إنجليزي)، عربي فقط، أو إنجليزي فقط
+    function filterLanguage(mode, btn) {
+      var buttons = document.querySelectorAll('.lang-filter-btn');
+      buttons.forEach(function(b) { b.classList.remove('active'); });
+      if (btn) {
+        btn.classList.add('active');
+      } else {
+        var el = document.getElementById('filter-' + mode + '-btn');
+        if (el) el.classList.add('active');
+      }
+
+      var grpAr = document.getElementById('group-ar-results');
+      var grpEn = document.getElementById('group-en-results');
+
+      if (mode === 'all') {
+        if (grpAr) grpAr.style.display = 'block';
+        if (grpEn) grpEn.style.display = 'block';
+      } else if (mode === 'ar') {
+        if (grpAr) grpAr.style.display = 'block';
+        if (grpEn) grpEn.style.display = 'none';
+      } else if (mode === 'en') {
+        if (grpAr) grpAr.style.display = 'none';
+        if (grpEn) grpEn.style.display = 'block';
+      }
     }
 
     function speakAiAnswer() {
@@ -4695,18 +4865,43 @@ ${trimmed.slice(0, 12000)}`;
     return /^[a-zA-Z0-9-]+(\.[a-zA-Z0-9-]+)+(\/.*)?$/.test(trimmed);
   }
 
-  // Helper: Perform Live Multi-Source Web Search (DuckDuckGo + Wikipedia + Groq AI Enrichment)
+  // Helper: Perform Live Multi-Source Web Search (DuckDuckGo + Arabic & English Wikipedia + Groq AI Dual-Language Translation & Progressive Ordering)
   interface WebSearchResultItem {
+    id: string;
     title: string;
     title_ar: string;
+    title_en?: string;
     url: string;
     domain: string;
     snippet: string;
     snippet_ar: string;
+    snippet_en?: string;
+    lang: 'ar' | 'en';
+    badge: string;
+    sourceType?: string;
   }
 
-  async function performLiveMultiSourceWebSearch(query: string): Promise<WebSearchResultItem[]> {
-    const rawResults: Array<{ title: string; url: string; snippet: string }> = [];
+  interface WebSearchResultsGroup extends Array<WebSearchResultItem> {
+    results_ar: WebSearchResultItem[];
+    results_en: WebSearchResultItem[];
+    allResultsSorted: WebSearchResultItem[];
+    query_ar: string;
+    query_en: string;
+    total_count: number;
+    ar_count: number;
+    en_count: number;
+    ai_overview: {
+      summary_ar: string;
+      key_points_ar: string[];
+      summary_en: string;
+      key_points_en: string[];
+    };
+    related_searches: string[];
+  }
+
+  async function performLiveMultiSourceWebSearch(query: string): Promise<WebSearchResultsGroup> {
+    const rawResults: Array<{ title: string; url: string; snippet: string; lang: 'ar' | 'en'; source: string }> = [];
+    const isArabicInitial = /[\u0600-\u06FF]/.test(query);
 
     // Source 1: Live DuckDuckGo HTML Search
     const ddgPromise = (async () => {
@@ -4732,7 +4927,7 @@ ${trimmed.slice(0, 12000)}`;
           const snippets: string[] = [];
 
           let m: RegExpExecArray | null;
-          while ((m = linkRegex.exec(html)) !== null && links.length < 8) {
+          while ((m = linkRegex.exec(html)) !== null && links.length < 10) {
             let href = m[1];
             const uddgMatch = href.match(/[?&]uddg=([^&]+)/);
             if (uddgMatch) {
@@ -4745,14 +4940,17 @@ ${trimmed.slice(0, 12000)}`;
               links.push({ url: href, title: cleanTitle });
             }
           }
-          while ((m = snippetRegex.exec(html)) !== null && snippets.length < 8) {
+          while ((m = snippetRegex.exec(html)) !== null && snippets.length < 10) {
             snippets.push(m[1].replace(/<[^>]+>/g, '').replace(/\s+/g, ' ').trim());
           }
           for (let i = 0; i < links.length; i++) {
+            const hasArText = /[\u0600-\u06FF]/.test(links[i].title + ' ' + (snippets[i] || ''));
             rawResults.push({
               title: links[i].title,
               url: links[i].url,
               snippet: snippets[i] || '',
+              lang: hasArText ? 'ar' : 'en',
+              source: 'duckduckgo',
             });
           }
         }
@@ -4761,14 +4959,12 @@ ${trimmed.slice(0, 12000)}`;
       }
     })();
 
-    // Source 2: Live Arabic & English Wikipedia Search API
-    const wikiPromise = (async () => {
+    // Source 2: Live Arabic Wikipedia Search API (ar.wikipedia.org)
+    const wikiArPromise = (async () => {
       try {
-        const isArabicQuery = /[\u0600-\u06FF]/.test(query);
-        const wikiLang = isArabicQuery ? 'ar' : 'en';
         const controller = new AbortController();
-        const t = setTimeout(() => controller.abort(), 3000);
-        const wikiUrl = `https://${wikiLang}.wikipedia.org/w/api.php?action=query&list=search&srsearch=${encodeURIComponent(
+        const t = setTimeout(() => controller.abort(), 3200);
+        const wikiUrl = `https://ar.wikipedia.org/w/api.php?action=query&list=search&srsearch=${encodeURIComponent(
           query
         )}&utf8=1&format=json&srlimit=5`;
         const wikiRes = await fetch(wikiUrl, { signal: controller.signal });
@@ -4779,126 +4975,336 @@ ${trimmed.slice(0, 12000)}`;
           };
           const items = data.query?.search || [];
           for (const item of items) {
-            const articleUrl = `https://${wikiLang}.wikipedia.org/wiki/${encodeURIComponent(
+            const articleUrl = `https://ar.wikipedia.org/wiki/${encodeURIComponent(
               item.title.replace(/\s+/g, '_')
             )}`;
             const cleanSnippet = item.snippet.replace(/<[^>]+>/g, '').replace(/&quot;/g, '"').trim();
             if (!rawResults.some((r) => r.url === articleUrl)) {
               rawResults.push({
-                title: `${item.title} — Wikipedia (${wikiLang.toUpperCase()})`,
+                title: `${item.title} — ويكيبيديا العربية`,
                 url: articleUrl,
                 snippet: cleanSnippet,
+                lang: 'ar',
+                source: 'wikipedia_ar',
               });
             }
           }
         }
       } catch {
-        // Ignore Wiki timeout
+        // Ignore Wiki Ar timeout
       }
     })();
 
-    await Promise.all([ddgPromise, wikiPromise]);
+    // Source 3: Live English Wikipedia Search API (en.wikipedia.org)
+    const wikiEnPromise = (async () => {
+      try {
+        const controller = new AbortController();
+        const t = setTimeout(() => controller.abort(), 3200);
+        const wikiUrl = `https://en.wikipedia.org/w/api.php?action=query&list=search&srsearch=${encodeURIComponent(
+          query
+        )}&utf8=1&format=json&srlimit=5`;
+        const wikiRes = await fetch(wikiUrl, { signal: controller.signal });
+        clearTimeout(t);
+        if (wikiRes.ok) {
+          const data = (await wikiRes.json()) as {
+            query?: { search?: Array<{ title: string; snippet: string }> };
+          };
+          const items = data.query?.search || [];
+          for (const item of items) {
+            const articleUrl = `https://en.wikipedia.org/wiki/${encodeURIComponent(
+              item.title.replace(/\s+/g, '_')
+            )}`;
+            const cleanSnippet = item.snippet.replace(/<[^>]+>/g, '').replace(/&quot;/g, '"').trim();
+            if (!rawResults.some((r) => r.url === articleUrl)) {
+              rawResults.push({
+                title: `${item.title} — Wikipedia (English)`,
+                url: articleUrl,
+                snippet: cleanSnippet,
+                lang: 'en',
+                source: 'wikipedia_en',
+              });
+            }
+          }
+        }
+      } catch {
+        // Ignore Wiki En timeout
+      }
+    })();
 
-    // Source 3: Use Groq (llama-3.3-70b-versatile) to translate results to Arabic AND ensure 8 rich, diverse web results for ANY query
+    await Promise.all([ddgPromise, wikiArPromise, wikiEnPromise]);
+
+    // Source 4: Use Groq (llama-3.3-70b-versatile) for Dual-Language Processing:
+    // Translate and order strictly: Results in Arabic FIRST, then English, for ANY entity searched by name.
     try {
       const { text: enrichedJson } = await unifiedChat({
         model: 'groq:llama-3.3-70b-versatile',
-        prompt: `أنت محرك بحث ويب عالمي ومترجم فوري داخل متصفح ذكي.
-المستخدم يبحث عن: "${query}"
+        prompt: `أنت محرك بحث ويب عالمي ثنائي اللغة (عربي - إنجليزي) وخبير ترجمة فورية متقدم.
+المستخدم يبحث بالاسم أو المصطلح عن: "${query}"
 
-لدينا النتائج الأولية التالية من الويب:
-${JSON.stringify(rawResults.slice(0, 6))}
+النتائج الأولية المسترجعة من الويب وويكيبيديا:
+${JSON.stringify(rawResults.slice(0, 8))}
 
-قم بإرجاع قائمة تحتوي على 8 نتائج بحث ويب حقيقية ومتنوعة وموثوقة مرتبطة مباشرة بـ "${query}" (استخدم النتائج الأولية أعلاه مع ترجمتها للعربية، وأضف إليها نتائج ومواقع حقيقية معروفة ومباشرة مثل المواقع الرسمية، الأخبار، ويكيبيديا، المجلات العلمية، أو المنصات التعليمية المتعلقة بـ "${query}" تحديداً).
-لكل نتيجة يجب توفير الحقول التالية:
-- "title": العنوان الأصلي للموقع أو الصفحة
-- "title_ar": عنوان الصفحة مترجماً إلى العربية الفصحى الواضحة
-- "url": رابط إلكتروني حقيقي وصحيح يبدأ بـ https://
-- "snippet": وصف مختصر لمحتوى الصفحة
-- "snippet_ar": ملخص غني ومفيد بالعربية الفصحى (سطرين) يشرح ما سيجده المستخدم في هذه النتيجة حول "${query}".
+المطلوب بدقة تامة:
+1. حدد الاسم بدقة باللغتين العربية والإنجليزية:
+   - "query_ar": اسم الكيان أو الموضوع باللغة العربية الفصحى
+   - "query_en": اسم الكيان أو الموضوع باللغة الإنجليزية
+2. نظرة عامة ذكية (AI Overview) تلائم بدقة ما تم البحث عنه بالاسم:
+   - "summary_ar": ملخص وافٍ وغني بالعربية الفصحى (3-4 أسطر) يشرح بالتفصيل من أو ما هو "${query}"، أهميته، وأبرز إنجازاته أو وظائفه أو خصائصه.
+   - "key_points_ar": قائمة بـ 3 إلى 4 نقاط جوهرية رئيسية بالعربية.
+   - "summary_en": ملخص تنفيذي باللغة الإنجليزية (Executive summary).
+   - "key_points_en": قائمة بـ 3 نقاط بالإنجليزية.
+3. "results_ar": قائمة بـ 6 إلى 8 نتائج بحث كاملة وموثوقة باللغة العربية (تبدأ بالظهور أولاً للمستخدم)، عناوينها "title_ar" مترجمة أو مكتوبة بالعربية بوضوح، مع روابط ويب حقيقية ("url")، وملخص "snippet_ar" غني ومفيد بالعربية، مع اسم النطاق "domain".
+4. "results_en": قائمة بـ 6 إلى 8 نتائج بحث أصلية باللغة الإنجليزية (تلي النتائج العربية لإكمال كافة النتائج الممكنة)، عناوينها الأصلية "title_en"، روابط رسمية وعالمية "url"، ملخص بالإنجليزية "snippet_en"، مع سطر ترجمة موجز بالعربية "snippet_ar"، واسم النطاق "domain".
+5. "related_searches": قائمة بـ 6 إلى 8 مصطلحات بحث مقترحة ذات صلة مباشرة بالاسم (مزيج عربي وإنجليزي).
 
-أخرج JSON صالح فقط بهذا الشكل:
-{"results": [{"title": "...", "title_ar": "...", "url": "https://...", "snippet": "...", "snippet_ar": "..."}]}`,
+أخرج JSON صالح فقط بهذا الهيكل حصراً:
+{
+  "query_ar": "...",
+  "query_en": "...",
+  "ai_overview": {
+    "summary_ar": "...",
+    "key_points_ar": ["...", "..."],
+    "summary_en": "...",
+    "key_points_en": ["...", "..."]
+  },
+  "results_ar": [
+    { "title_ar": "...", "title": "...", "url": "https://...", "domain": "...", "snippet_ar": "...", "snippet": "..." }
+  ],
+  "results_en": [
+    { "title": "...", "title_en": "...", "title_ar": "...", "url": "https://...", "domain": "...", "snippet": "...", "snippet_en": "...", "snippet_ar": "..." }
+  ],
+  "related_searches": ["...", "..."]
+}`,
         jsonMode: true,
-        temperature: 0.35,
+        temperature: 0.25,
       });
 
       const parsed = JSON.parse(enrichedJson);
-      const list = Array.isArray(parsed) ? parsed : parsed.results;
-      if (Array.isArray(list) && list.length > 0) {
-        return list.slice(0, 8).map((r: Record<string, unknown>) => {
+      const resArList: WebSearchResultItem[] = [];
+      const resEnList: WebSearchResultItem[] = [];
+
+      if (Array.isArray(parsed.results_ar)) {
+        parsed.results_ar.forEach((r: Record<string, unknown>, idx: number) => {
           const urlStr = String(r.url || `https://ar.wikipedia.org/wiki/${encodeURIComponent(query)}`);
           let domain = 'web.org';
-          try {
-            domain = new URL(urlStr).hostname.replace(/^www\./, '');
-          } catch {}
-          return {
-            title: String(r.title || query),
+          try { domain = new URL(urlStr).hostname.replace(/^www\./, ''); } catch {}
+          resArList.push({
+            id: `ar_${idx}_${Date.now()}`,
+            title: String(r.title || r.title_ar || query),
             title_ar: String(r.title_ar || r.title || query),
+            title_en: r.title_en ? String(r.title_en) : undefined,
             url: urlStr,
             domain,
-            snippet: String(r.snippet || ''),
+            snippet: String(r.snippet || r.snippet_ar || ''),
             snippet_ar: String(r.snippet_ar || r.snippet || ''),
-          };
+            lang: 'ar',
+            badge: '🇸🇦 مترجم للعربية',
+            sourceType: domain.includes('wikipedia') ? 'wikipedia_ar' : 'web_ar',
+          });
         });
       }
+
+      if (Array.isArray(parsed.results_en)) {
+        parsed.results_en.forEach((r: Record<string, unknown>, idx: number) => {
+          const urlStr = String(r.url || `https://en.wikipedia.org/wiki/${encodeURIComponent(query)}`);
+          let domain = 'web.org';
+          try { domain = new URL(urlStr).hostname.replace(/^www\./, ''); } catch {}
+          resEnList.push({
+            id: `en_${idx}_${Date.now()}`,
+            title: String(r.title_en || r.title || query),
+            title_ar: String(r.title_ar || r.title_en || r.title || query),
+            title_en: String(r.title_en || r.title || query),
+            url: urlStr,
+            domain,
+            snippet: String(r.snippet_en || r.snippet || ''),
+            snippet_ar: String(r.snippet_ar || r.snippet_en || r.snippet || ''),
+            snippet_en: String(r.snippet_en || r.snippet || ''),
+            lang: 'en',
+            badge: '🌐 بالإنجليزية (English)',
+            sourceType: domain.includes('wikipedia') ? 'wikipedia_en' : 'web_en',
+          });
+        });
+      }
+
+      // دمج وتدفق النتائج: النتائج المترجمة بالعربية تبدأ بالظهور أولاً، وتليها النتائج بالإنجليزية لإكمال كافة النتائج
+      const allSorted = [...resArList, ...resEnList];
+
+      if (allSorted.length > 0) {
+        const group = allSorted as WebSearchResultsGroup;
+        group.results_ar = resArList;
+        group.results_en = resEnList;
+        group.allResultsSorted = allSorted;
+        group.query_ar = String(parsed.query_ar || query);
+        group.query_en = String(parsed.query_en || query);
+        group.total_count = allSorted.length;
+        group.ar_count = resArList.length;
+        group.en_count = resEnList.length;
+        group.ai_overview = {
+          summary_ar: String(parsed.ai_overview?.summary_ar || `تحليل تفصيلي شامل لـ «${query}» مع استعراض النتائج المعربة والمصادر العالمية.`),
+          key_points_ar: Array.isArray(parsed.ai_overview?.key_points_ar) ? parsed.ai_overview.key_points_ar.map(String) : [
+            `معلومات موثقة ومحدثة حول «${query}» من مصادر رسمية وموسوعية.`,
+            `تغطية ثنائية اللغة تشمل المصادر العربية والأجنبية مع الترجمة الفورية.`,
+            `إمكانية تشغيل الوسائط المرتبطة وحفظ الصفحات للتصفح بدون إنترنت.`
+          ],
+          summary_en: String(parsed.ai_overview?.summary_en || `Comprehensive overview and verified intelligence on "${query}".`),
+          key_points_en: Array.isArray(parsed.ai_overview?.key_points_en) ? parsed.ai_overview.key_points_en.map(String) : [
+            `Verified global facts and documentation regarding "${query}".`,
+            `Bilingual multi-source coverage with real-time translation.`
+          ],
+        };
+        group.related_searches = Array.isArray(parsed.related_searches) && parsed.related_searches.length > 0
+          ? parsed.related_searches.map(String)
+          : [
+              `${query} ويكيبيديا`,
+              `${query} English overview`,
+              `${query} شرح وتحليل`,
+              `${query} official site`,
+              `أهم معلومات عن ${query}`,
+              `${query} news & updates`
+            ];
+        return group;
+      }
     } catch {
-      // Fallback if JSON parsing fails
+      // Fallback below
     }
 
-    // Fallback mapping if Groq JSON failed
-    if (rawResults.length > 0) {
-      return rawResults.slice(0, 8).map((r) => {
-        let domain = 'web.org';
-        try {
-          domain = new URL(r.url).hostname.replace(/^www\./, '');
-        } catch {}
-        return {
+    // ═══ Fallback Bilingual Group (تبدأ بالعربية ثم الإنجليزية) ═══
+    const fallbackAr: WebSearchResultItem[] = [];
+    const fallbackEn: WebSearchResultItem[] = [];
+
+    // Separate raw results by detected language
+    rawResults.forEach((r, idx) => {
+      let domain = 'web.org';
+      try { domain = new URL(r.url).hostname.replace(/^www\./, ''); } catch {}
+      if (r.lang === 'ar' || r.source === 'wikipedia_ar') {
+        fallbackAr.push({
+          id: `f_ar_${idx}`,
           title: r.title,
           title_ar: r.title,
           url: r.url,
           domain,
           snippet: r.snippet,
-          snippet_ar: r.snippet,
-        };
-      });
-    }
+          snippet_ar: r.snippet || `نتائج ومعلومات باللغة العربية حول «${query}».`,
+          lang: 'ar',
+          badge: '🇸🇦 مترجم للعربية',
+          sourceType: 'ar_source',
+        });
+      } else {
+        fallbackEn.push({
+          id: `f_en_${idx}`,
+          title: r.title,
+          title_ar: `${r.title} (مترجم)`,
+          title_en: r.title,
+          url: r.url,
+          domain,
+          snippet: r.snippet,
+          snippet_ar: `ترجمة موجزة: ${r.snippet || query}`,
+          snippet_en: r.snippet,
+          lang: 'en',
+          badge: '🌐 بالإنجليزية (English)',
+          sourceType: 'en_source',
+        });
+      }
+    });
 
     const enc = encodeURIComponent(query);
-    return [
-      {
-        title: `${query} — ويكيبيديا، الموسوعة الحرة`,
-        title_ar: `${query} — مقالة موسوعية شاملة في ويكيبيديا`,
-        url: `https://ar.wikipedia.org/w/index.php?search=${enc}`,
-        domain: 'ar.wikipedia.org',
-        snippet: `Comprehensive encyclopedia search results for ${query}`,
-        snippet_ar: `مقالات ومعلومات موسوعية مفصلة وموثقة حول "${query}" مع المراجع والروابط ذات الصلة.`,
-      },
-      {
-        title: `${query} — Wikipedia English Encyclopedia`,
-        title_ar: `${query} — الموسوعة الإنجليزية (مترجمة للعربية)`,
-        url: `https://en.wikipedia.org/w/index.php?search=${enc}`,
-        domain: 'en.wikipedia.org',
-        snippet: `English Wikipedia articles and references about ${query}`,
-        snippet_ar: `المصادر والمقالات التفصيلية من الموسوعة العالمية حول "${query}" مع ترجمة عربية فورية.`,
-      },
-      {
-        title: `${query} — BBC News & Global Coverage`,
-        title_ar: `تغطية وأخبار وتقارير حول: ${query} — BBC`,
-        url: `https://www.bbc.co.uk/search?q=${enc}`,
-        domain: 'bbc.co.uk',
-        snippet: `Latest news, analysis, and articles on ${query}`,
-        snippet_ar: `أحدث التقارير الإخبارية والتحليلات المعمقة والمقالات المنشورة حول "${query}".`,
-      },
-      {
-        title: `${query} — Archive.org Digital Library`,
-        title_ar: `مكتبة الأرشيف الرقمي والوسائط المفتوحة حول: ${query}`,
-        url: `https://archive.org/search?query=${enc}`,
-        domain: 'archive.org',
-        snippet: `Books, videos, audio, and historical archives for ${query}`,
-        snippet_ar: `مكتبة شاملة تضم الكتب والوثائقيات والملفات المرئية والصوتية المرتبطة بـ "${query}".`,
-      },
+    if (fallbackAr.length === 0) {
+      fallbackAr.push(
+        {
+          id: 'def_ar_1',
+          title: `${query} — ويكيبيديا، الموسوعة الحرة`,
+          title_ar: `${query} — مقالة موسوعية شاملة ومترجمة في ويكيبيديا`,
+          url: `https://ar.wikipedia.org/w/index.php?search=${enc}`,
+          domain: 'ar.wikipedia.org',
+          snippet: `معلومات موسوعية ومصادر موثقة حول «${query}» باللغة العربية.`,
+          snippet_ar: `مقالات ومعلومات موسوعية مفصلة وموثقة حول «${query}» مع المراجع والروابط ذات الصلة.`,
+          lang: 'ar',
+          badge: '🇸🇦 بالعربية',
+          sourceType: 'wikipedia_ar',
+        },
+        {
+          id: 'def_ar_2',
+          title: `أخبار وتقارير حول: ${query} — الجزيرة و BBC عربي`,
+          title_ar: `تغطية وتقارير معربة حول: ${query}`,
+          url: `https://www.bbc.com/arabic/search?q=${enc}`,
+          domain: 'bbc.com/arabic',
+          snippet: `تقارير وتحليلات إخبارية باللغة العربية حول «${query}».`,
+          snippet_ar: `أحدث التغطيات الصحفية والتحليلات الشاملة المعربة حول «${query}».`,
+          lang: 'ar',
+          badge: '🇸🇦 بالعربية',
+          sourceType: 'news_ar',
+        }
+      );
+    }
+
+    if (fallbackEn.length === 0) {
+      fallbackEn.push(
+        {
+          id: 'def_en_1',
+          title: `${query} — Wikipedia English Encyclopedia`,
+          title_ar: `${query} — موسوعة ويكيبيديا العالمية بالإنجليزية`,
+          title_en: `${query} — Wikipedia`,
+          url: `https://en.wikipedia.org/w/index.php?search=${enc}`,
+          domain: 'en.wikipedia.org',
+          snippet: `Comprehensive references, history, and verified details about ${query}.`,
+          snippet_ar: `المصادر والبيانات الشاملة بالإنجليزية حول «${query}» مع الترجمة العربية الفورية.`,
+          snippet_en: `Comprehensive references, history, and verified details about ${query}.`,
+          lang: 'en',
+          badge: '🌐 English',
+          sourceType: 'wikipedia_en',
+        },
+        {
+          id: 'def_en_2',
+          title: `${query} — Official Global Information & Archives`,
+          title_ar: `${query} — الأرشيف والمصادر العالمية الرسمية`,
+          title_en: `${query} — Archives and Research`,
+          url: `https://archive.org/search?query=${enc}`,
+          domain: 'archive.org',
+          snippet: `Digital media, books, and international research documents on ${query}.`,
+          snippet_ar: `المكتبة الرقمية الدولية والوثائق الأرشيفية المرتبطة بـ «${query}».`,
+          snippet_en: `Digital media, books, and international research documents on ${query}.`,
+          lang: 'en',
+          badge: '🌐 English',
+          sourceType: 'archive_en',
+        }
+      );
+    }
+
+    // الترتيب الصارم: تبدأ بالعربية أولاً ثم تليها الإنجليزية
+    const combinedFallback = [...fallbackAr, ...fallbackEn];
+    const groupFallback = combinedFallback as WebSearchResultsGroup;
+    groupFallback.results_ar = fallbackAr;
+    groupFallback.results_en = fallbackEn;
+    groupFallback.allResultsSorted = combinedFallback;
+    groupFallback.query_ar = isArabicInitial ? query : `${query} (مترجم)`;
+    groupFallback.query_en = isArabicInitial ? `${query} (English)` : query;
+    groupFallback.total_count = combinedFallback.length;
+    groupFallback.ar_count = fallbackAr.length;
+    groupFallback.en_count = fallbackEn.length;
+    groupFallback.ai_overview = {
+      summary_ar: `نتائج بحث شاملة عن «${query}»، تم جلب النتائج المعربة أولاً ثم المصادر العالمية باللغة الإنجليزية لإتاحة كافة المعلومات.`,
+      key_points_ar: [
+        `عرض النتائج باللغة العربية أولاً لسهولة القراءة السريعة.`,
+        `استعراض المراجع باللغة الإنجليزية للوصول إلى كافة التفاصيل والمصادر العالمية.`,
+        `ترجمة فورية للملخصات والعناوين.`
+      ],
+      summary_en: `Live comprehensive search results for "${query}" sorted starting with Arabic translation, followed by English sources.`,
+      key_points_en: [
+        `Arabic translated results displayed first.`,
+        `Full English international sources included.`,
+        `Direct multi-source coverage.`
+      ],
+    };
+    groupFallback.related_searches = [
+      `${query} بالعربية`,
+      `${query} English`,
+      `${query} ويكيبيديا`,
+      `${query} facts & history`,
+      `أبرز معلومات عن ${query}`,
+      `${query} official`
     ];
+
+    return groupFallback;
   }
 
   // 5. /api/browse — Unified Smart Web Browser (Handles BOTH Search Queries with Multi-Results AND Direct Website URLs with Live Extraction & Translation)
@@ -5036,10 +5442,19 @@ ${snippetsContext}
         res.json({
           mode: 'search',
           query: queryOrUrl,
+          query_ar: webResults.query_ar || queryOrUrl,
+          query_en: webResults.query_en || queryOrUrl,
           url: `https://www.google.com/search?q=${encodeURIComponent(queryOrUrl)}`,
-          title: `نتائج البحث عن: ${queryOrUrl}`,
+          title: `نتائج البحث عن: ${queryOrUrl} (العربية أولاً ثم الإنجليزية)`,
           content_ar: summaryAr,
           web_results: webResults,
+          results_ar: webResults.results_ar || webResults.filter((w) => w.lang === 'ar'),
+          results_en: webResults.results_en || webResults.filter((w) => w.lang === 'en'),
+          total_count: webResults.total_count || webResults.length,
+          ar_count: webResults.ar_count || webResults.filter((w) => w.lang === 'ar').length,
+          en_count: webResults.en_count || webResults.filter((w) => w.lang === 'en').length,
+          ai_overview: webResults.ai_overview,
+          related_searches: webResults.related_searches || [],
           extracted_links: webResults.map((w) => ({ title: w.title_ar, url: w.url })),
           discovered_videos: queryVideos,
         });
