@@ -37,6 +37,8 @@ import {
   Key,
   Gauge,
   WifiOff,
+  Trash2,
+  Filter,
 } from 'lucide-react';
 
 // ═══ نماذج بيانات بنية العمليات المتعددة وخدمة VPN وتوفير البيانات ═══
@@ -195,6 +197,10 @@ export default function App() {
     ];
   });
 
+  // البحث والتصفية في سجل التصفح (History Search & Filter)
+  const [historySearchQuery, setHistorySearchQuery] = useState<string>('');
+  const [historyFilterCategory, setHistoryFilterCategory] = useState<'all' | 'searches' | 'domains'>('all');
+
   const [historyList, setHistoryList] = useState<Array<{ title: string; url: string; time: string }>>(() => {
     try {
       const raw = localStorage.getItem('anwer_history');
@@ -245,6 +251,39 @@ export default function App() {
     setToastMsg(msg);
     if (toastTimeoutRef.current) clearTimeout(toastTimeoutRef.current);
     toastTimeoutRef.current = setTimeout(() => setToastMsg(null), 3000);
+  };
+
+  // تصفية سجل التصفح بالكلمات المفتاحية والتصنيفات
+  const filteredHistory = historyList.filter((item) => {
+    const q = historySearchQuery.trim().toLowerCase();
+    const matchesSearch =
+      !q ||
+      item.title.toLowerCase().includes(q) ||
+      item.url.toLowerCase().includes(q);
+
+    if (!matchesSearch) return false;
+
+    if (historyFilterCategory === 'searches') {
+      return item.url.includes('google.com/search') || item.title.includes('بحث');
+    }
+    if (historyFilterCategory === 'domains') {
+      return !item.url.includes('google.com/search');
+    }
+    return true;
+  });
+
+  const handleDeleteHistoryItem = (indexToDelete: number, e: React.MouseEvent) => {
+    e.stopPropagation();
+    setHistoryList((prev) => prev.filter((_, idx) => idx !== indexToDelete));
+    showToast('تم حذف الموقع من السجل');
+  };
+
+  const handleClearAllHistory = () => {
+    if (window.confirm('هل أنت متأكد من رغبتك في مسح سجل التصفح بالكامل؟')) {
+      setHistoryList([]);
+      setHistorySearchQuery('');
+      showToast('تم مسح سجل التصفح بالكامل 🗑️');
+    }
   };
 
   const activeTab = tabs.find((t) => t.id === activeTabId) || tabs[0];
@@ -1423,46 +1462,161 @@ export default function App() {
       ═══════════════════════════════════════════════════════════════ */}
       {isHistoryDrawerOpen && (
         <div
-          className="fixed inset-0 z-50 bg-black/40 flex justify-end"
+          className="fixed inset-0 z-50 bg-black/40 backdrop-blur-2xs flex justify-end"
           onClick={() => setIsHistoryDrawerOpen(false)}
         >
           <div
             onClick={(e) => e.stopPropagation()}
-            className="w-full max-w-sm h-full bg-white dark:bg-[#2B2D30] shadow-2xl flex flex-col"
+            className="w-full max-w-md h-full bg-white dark:bg-[#2B2D30] shadow-2xl flex flex-col border-r border-gray-200 dark:border-gray-700"
           >
-            <div className="p-4 border-b border-gray-200 dark:border-gray-700 flex items-center justify-between">
+            {/* ترويسة درج السجل وأزرار التحكم */}
+            <div className="p-4 border-b border-gray-200 dark:border-gray-700 flex items-center justify-between bg-gray-50 dark:bg-white/5">
               <div className="flex items-center gap-2">
                 <History className="w-5 h-5 text-blue-600" />
-                <h3 className="font-bold text-sm">سجل التصفح ({historyList.length})</h3>
+                <h3 className="font-bold text-sm text-gray-900 dark:text-white">
+                  سجل التصفح ({filteredHistory.length})
+                </h3>
               </div>
-              <button
-                type="button"
-                onClick={() => setIsHistoryDrawerOpen(false)}
-                className="p-1 rounded-full hover:bg-black/10 dark:hover:bg-white/10"
-              >
-                <X className="w-5 h-5" />
-              </button>
+
+              <div className="flex items-center gap-1.5">
+                {historyList.length > 0 && (
+                  <button
+                    type="button"
+                    onClick={handleClearAllHistory}
+                    className="p-1.5 rounded-lg text-red-500 hover:bg-red-50 dark:hover:bg-red-950/30 transition text-xs flex items-center gap-1 font-semibold"
+                    title="مسح سجل التصفح بالكامل"
+                  >
+                    <Trash2 className="w-3.5 h-3.5" />
+                    <span className="hidden sm:inline">مسح الكل</span>
+                  </button>
+                )}
+                <button
+                  type="button"
+                  onClick={() => setIsHistoryDrawerOpen(false)}
+                  className="p-1 rounded-full hover:bg-black/10 dark:hover:bg-white/10 text-gray-400 hover:text-gray-700 dark:hover:text-white"
+                >
+                  <X className="w-5 h-5" />
+                </button>
+              </div>
             </div>
-            <div className="flex-1 overflow-y-auto p-4 space-y-2">
-              {historyList.length === 0 ? (
-                <div className="text-center py-12 text-gray-400 text-xs">سجل التصفح فارغ</div>
+
+            {/* مربع البحث والتصفية المباشر بالكلمات المفتاحية */}
+            <div className="p-3 border-b border-gray-200 dark:border-gray-700 bg-white dark:bg-[#2B2D30] space-y-2.5">
+              <div className="relative flex items-center">
+                <Search className="w-4 h-4 text-gray-400 absolute right-3 pointer-events-none" />
+                <input
+                  type="text"
+                  value={historySearchQuery}
+                  onChange={(e) => setHistorySearchQuery(e.target.value)}
+                  placeholder="ابحث في السجل بالاسم، الرابط، أو الكلمة..."
+                  className="w-full pr-9 pl-8 py-2 rounded-xl border border-gray-200 dark:border-gray-700 bg-gray-50 dark:bg-white/5 text-xs text-gray-900 dark:text-white focus:outline-none focus:border-blue-500 focus:bg-white dark:focus:bg-[#1E1F22] transition"
+                  autoFocus
+                />
+                {historySearchQuery && (
+                  <button
+                    type="button"
+                    onClick={() => setHistorySearchQuery('')}
+                    className="absolute left-2.5 text-gray-400 hover:text-gray-600 dark:hover:text-white p-0.5"
+                    title="مسح البحث"
+                  >
+                    <X className="w-3.5 h-3.5" />
+                  </button>
+                )}
+              </div>
+
+              {/* أزرار التصفية والتصنيف (Filter Chips) */}
+              <div className="flex items-center gap-1.5 overflow-x-auto no-scrollbar text-[11px]">
+                <button
+                  type="button"
+                  onClick={() => setHistoryFilterCategory('all')}
+                  className={`px-3 py-1 rounded-lg font-semibold transition shrink-0 cursor-pointer ${
+                    historyFilterCategory === 'all'
+                      ? 'bg-blue-600 text-white shadow-xs'
+                      : 'bg-gray-100 dark:bg-white/5 text-gray-600 dark:text-gray-300 hover:bg-gray-200'
+                  }`}
+                >
+                  الكل ({historyList.length})
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setHistoryFilterCategory('searches')}
+                  className={`px-3 py-1 rounded-lg font-semibold transition shrink-0 cursor-pointer ${
+                    historyFilterCategory === 'searches'
+                      ? 'bg-blue-600 text-white shadow-xs'
+                      : 'bg-gray-100 dark:bg-white/5 text-gray-600 dark:text-gray-300 hover:bg-gray-200'
+                  }`}
+                >
+                  عمليات البحث 🔍
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setHistoryFilterCategory('domains')}
+                  className={`px-3 py-1 rounded-lg font-semibold transition shrink-0 cursor-pointer ${
+                    historyFilterCategory === 'domains'
+                      ? 'bg-blue-600 text-white shadow-xs'
+                      : 'bg-gray-100 dark:bg-white/5 text-gray-600 dark:text-gray-300 hover:bg-gray-200'
+                  }`}
+                >
+                  المواقع والنطاقات 🌐
+                </button>
+              </div>
+            </div>
+
+            {/* قائمة نتائج السجل المصفاة */}
+            <div className="flex-1 overflow-y-auto p-3 space-y-2">
+              {filteredHistory.length === 0 ? (
+                <div className="text-center py-16 text-gray-400 text-xs flex flex-col items-center">
+                  <Search className="w-8 h-8 text-gray-300 dark:text-gray-600 mb-2" />
+                  {historySearchQuery ? (
+                    <>
+                      <p className="font-semibold text-gray-600 dark:text-gray-300">
+                        لا توجد نتائج تطابق: "{historySearchQuery}"
+                      </p>
+                      <button
+                        type="button"
+                        onClick={() => {
+                          setHistorySearchQuery('');
+                          setHistoryFilterCategory('all');
+                        }}
+                        className="mt-3 text-blue-600 hover:underline font-bold text-xs"
+                      >
+                        إعادة ضبط البحث والتصفية
+                      </button>
+                    </>
+                  ) : (
+                    <p>سجل التصفح فارغ تماماً</p>
+                  )}
+                </div>
               ) : (
-                historyList.map((h, i) => (
+                filteredHistory.map((h, i) => (
                   <div
                     key={i}
                     onClick={() => {
                       navigateCurrentTab(h.url);
                       setIsHistoryDrawerOpen(false);
                     }}
-                    className="p-3 rounded-xl border border-gray-100 dark:border-gray-700/60 hover:bg-gray-50 dark:hover:bg-white/5 cursor-pointer transition flex items-center justify-between"
+                    className="p-3 rounded-xl border border-gray-100 dark:border-gray-700/60 hover:border-blue-500 hover:bg-blue-50/40 dark:hover:bg-blue-950/20 cursor-pointer transition flex items-center justify-between group"
                   >
-                    <div className="truncate flex-1">
-                      <div className="text-xs font-bold truncate">{h.title}</div>
+                    <div className="truncate flex-1 pl-2">
+                      <div className="text-xs font-bold text-gray-900 dark:text-white truncate mb-0.5">
+                        {h.title}
+                      </div>
                       <div className="text-[10px] text-gray-400 font-mono truncate dir-ltr text-left">
                         {h.url}
                       </div>
                     </div>
-                    <span className="text-[10px] text-gray-400">{h.time}</span>
+
+                    <div className="flex items-center gap-2 shrink-0">
+                      <span className="text-[10px] text-gray-400 font-mono">{h.time}</span>
+                      <button
+                        type="button"
+                        onClick={(e) => handleDeleteHistoryItem(i, e)}
+                        className="opacity-0 group-hover:opacity-100 p-1 text-gray-400 hover:text-red-500 rounded-md hover:bg-black/5 dark:hover:bg-white/10 transition"
+                        title="حذف من السجل"
+                      >
+                        <Trash2 className="w-3.5 h-3.5" />
+                      </button>
+                    </div>
                   </div>
                 ))
               )}
