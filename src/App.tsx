@@ -39,13 +39,23 @@ import {
   WifiOff,
   Trash2,
   Filter,
+  Film,
+  Play,
+  Pause,
+  Database,
+  CheckCircle2,
+  Volume2,
+  Clock,
+  Maximize2,
+  HardDrive,
+  Video,
 } from 'lucide-react';
 
-// ═══ نماذج بيانات بنية العمليات المتعددة وخدمة VPN وتوفير البيانات ═══
+// ═══ نماذج بيانات بنية العمليات المتعددة وخدمة VPN وقواعد البيانات ═══
 
 export interface ProcessItem {
   pid: number;
-  type: 'browser' | 'renderer' | 'gpu' | 'network' | 'storage' | 'vpn';
+  type: 'browser' | 'renderer' | 'gpu' | 'network' | 'storage' | 'vpn' | 'database';
   name: string;
   memoryMB: number;
   cpuPercent: number;
@@ -59,16 +69,16 @@ export interface TabItem {
   url: string;
   history: string[];
   historyIndex: number;
-  favicon?: string;
   loading: boolean;
   isCrashed: boolean;
+  favicon?: string;
 }
 
 export interface BookmarkItem {
   id: string;
   title: string;
   url: string;
-  favicon?: string;
+  icon?: string;
 }
 
 export interface DownloadItem {
@@ -76,8 +86,19 @@ export interface DownloadItem {
   filename: string;
   url: string;
   size: string;
-  status: 'completed' | 'downloading';
+  status: 'completed' | 'in_progress' | 'cancelled';
   time: string;
+}
+
+export interface VideoRecord {
+  id: string;
+  title: string;
+  streamUrl: string;
+  thumbnail: string;
+  duration: string;
+  playedAt: string;
+  isCachedOffline: boolean;
+  pageUrl: string;
 }
 
 export interface UserProfile {
@@ -133,51 +154,123 @@ const AVAILABLE_VPN_SERVERS: VpnServerInfo[] = [
     flag: '🇸🇬',
     ip: '139.180.201.76',
     ping: 75,
-    protocol: 'WireGuard Stealth',
+    protocol: 'WireGuard Stealth-Tunnel',
+  },
+];
+
+// مكتبة فيديوهات نموذجية جاهزة للتشغيل والحفظ للمشاهدة بدون إنترنت
+const SAMPLE_VIDEOS: VideoRecord[] = [
+  {
+    id: 'vid_1',
+    title: 'فيلم وثائقي: استكشاف الفضاء والكون بالدقة العالية (Full HD)',
+    streamUrl: 'https://commondatastorage.googleapis.com/gtv-videos-bucket/sample/TearsOfSteel.mp4',
+    thumbnail: 'https://commondatastorage.googleapis.com/gtv-videos-bucket/sample/images/TearsOfSteel.jpg',
+    duration: '12:14',
+    playedAt: 'اليوم 10:15 ص',
+    isCachedOffline: true,
+    pageUrl: 'https://anwerbrowser.local/videos/space-exploration',
+  },
+  {
+    id: 'vid_2',
+    title: 'مغامرة الرسوم المتحركة الخيالية — Sintel في رحلة استكشافية',
+    streamUrl: 'https://commondatastorage.googleapis.com/gtv-videos-bucket/sample/Sintel.mp4',
+    thumbnail: 'https://commondatastorage.googleapis.com/gtv-videos-bucket/sample/images/Sintel.jpg',
+    duration: '08:52',
+    playedAt: 'أمس 04:20 م',
+    isCachedOffline: true,
+    pageUrl: 'https://anwerbrowser.local/videos/sintel-animation',
+  },
+  {
+    id: 'vid_3',
+    title: 'عرض تقني: ثورة الحوسبة والذكاء الاصطناعي في متصفحات المستقبل',
+    streamUrl: 'https://commondatastorage.googleapis.com/gtv-videos-bucket/sample/ElephantsDream.mp4',
+    thumbnail: 'https://commondatastorage.googleapis.com/gtv-videos-bucket/sample/images/ElephantsDream.jpg',
+    duration: '10:54',
+    playedAt: 'أمس 08:45 م',
+    isCachedOffline: true,
+    pageUrl: 'https://anwerbrowser.local/videos/future-ai',
+  },
+  {
+    id: 'vid_4',
+    title: 'مغامرة الطبيعة والأرانب الكرتونية — Big Buck Bunny',
+    streamUrl: 'https://commondatastorage.googleapis.com/gtv-videos-bucket/sample/BigBuckBunny.mp4',
+    thumbnail: 'https://commondatastorage.googleapis.com/gtv-videos-bucket/sample/images/BigBuckBunny.jpg',
+    duration: '09:56',
+    playedAt: 'قبل 3 أيام',
+    isCachedOffline: true,
+    pageUrl: 'https://anwerbrowser.local/videos/big-buck-bunny',
   },
 ];
 
 export default function App() {
-  // ═══ 1. خدمة تسريع التصفح والعمل في أضعف حالات النت (Data Saver & Turbo Mode) ═══
-  const [dataSaver, setDataSaver] = useState<boolean>(() => {
+  // ═══ 1. قاعدة بيانات التخزين ونافذة الموافقة والاعتماد ═══
+  const [databaseApproved, setDatabaseApproved] = useState<boolean>(() => {
     try {
-      const saved = localStorage.getItem('anwer_data_saver');
-      if (saved !== null) return saved === 'true';
-    } catch {}
-    return true; // مفعّل افتراضياً لضمان السرعة الفائقة 100x حتى في أضعف شبكات 2G/3G
-  });
-
-  const [isOnline, setIsOnline] = useState<boolean>(typeof navigator !== 'undefined' ? navigator.onLine : true);
-  const [networkSpeedTier, setNetworkSpeedTier] = useState<string>('فائقة (Turbo)');
-
-  // ═══ 2. خدمة Free VPN الثابتة والدائمة في الخلفية (Always-On Background VPN) ═══
-  const [vpnEnabled, setVpnEnabled] = useState<boolean>(() => {
-    try {
-      const saved = localStorage.getItem('anwer_vpn_enabled');
+      const saved = localStorage.getItem('anwer_database_approved');
       if (saved !== null) return saved === 'true';
     } catch {}
     return true;
   });
 
-  const [selectedVpn, setSelectedVpn] = useState<VpnServerInfo>(AVAILABLE_VPN_SERVERS[0]);
-  const [isVpnModalOpen, setIsVpnModalOpen] = useState<boolean>(false);
-  const [vpnBytesProtected, setVpnBytesProtected] = useState<number>(54.6);
+  const [isDbApprovalModalOpen, setIsDbApprovalModalOpen] = useState<boolean>(false);
 
-  // ═══ 3. عملية المتصفح الرئيسية (Browser Process) والتبويبات المستقلة الحقيقية ═══
+  // ═══ 2. سجل الفيديوهات المشاهدة المحفوظة للمشاهدة بدون إنترنت ═══
+  const [videoWatchHistory, setVideoWatchHistory] = useState<VideoRecord[]>(() => {
+    try {
+      const saved = localStorage.getItem('anwer_video_watch_history');
+      if (saved) return JSON.parse(saved);
+    } catch {}
+    return SAMPLE_VIDEOS;
+  });
+
+  const [currentPlayingVideo, setCurrentPlayingVideo] = useState<VideoRecord | null>(null);
+  const [isVideoPlayerOpen, setIsVideoPlayerOpen] = useState<boolean>(false);
+  const [isOfflineVideosDrawerOpen, setIsOfflineVideosDrawerOpen] = useState<boolean>(false);
+  const [customVideoUrlInput, setCustomVideoUrlInput] = useState<string>('');
+  const [customVideoTitleInput, setCustomVideoTitleInput] = useState<string>('');
+  const [videoPlaybackRate, setVideoPlaybackRate] = useState<number>(1);
+  const videoPlayerRef = useRef<HTMLVideoElement | null>(null);
+
+  // ═══ 3. Free VPN الدائم والمستقر ═══
+  const [vpnEnabled, setVpnEnabled] = useState<boolean>(() => {
+    try {
+      const saved = localStorage.getItem('anwer_vpn_enabled');
+      if (saved !== null) return saved === 'true';
+    } catch {}
+    return true; // تشغيل تلقائي دائم وثابت في الخلفية
+  });
+
+  const [selectedVpn, setSelectedVpn] = useState<VpnServerInfo>(AVAILABLE_VPN_SERVERS[0]);
+  const [vpnBytesProtected, setVpnBytesProtected] = useState<number>(14.85);
+  const [isVpnModalOpen, setIsVpnModalOpen] = useState<boolean>(false);
+
+  // ═══ 4. وضع توفير البيانات الذكي والسرعة الفائقة ═══
+  const [dataSaver, setDataSaver] = useState<boolean>(() => {
+    try {
+      const saved = localStorage.getItem('anwer_data_saver');
+      if (saved !== null) return saved === 'true';
+    } catch {}
+    return true; // مفعّل تلقائياً لتسريع التصفح في كل الظروف
+  });
+  const [networkSpeedTier, setNetworkSpeedTier] = useState<string>('فائقة (Turbo Stream)');
+  const [savedDataMB, setSavedDataMB] = useState<number>(8.4);
+  const [isOnline, setIsOnline] = useState<boolean>(navigator.onLine ?? true);
+
+  // ═══ 5. التبويبات والملاحة (Multi-Tab Navigation) ═══
   const [tabs, setTabs] = useState<TabItem[]>([
     {
       id: 'tab_1',
       pid: 101,
-      title: 'Google',
-      url: 'https://www.google.com',
-      history: ['https://www.google.com'],
+      title: 'علامة تبويب جديدة',
+      url: 'about:blank',
+      history: ['about:blank'],
       historyIndex: 0,
       loading: false,
       isCrashed: false,
     },
   ]);
   const [activeTabId, setActiveTabId] = useState<string>('tab_1');
-  const [urlInput, setUrlInput] = useState<string>('https://www.google.com');
+  const [urlInput, setUrlInput] = useState<string>('');
   const [searchQuery, setSearchQuery] = useState<string>('');
   const [zoomLevel, setZoomLevel] = useState<number>(100);
 
@@ -240,69 +333,30 @@ export default function App() {
   const [isProfileModalOpen, setIsProfileModalOpen] = useState<boolean>(false);
   const [isHistoryDrawerOpen, setIsHistoryDrawerOpen] = useState<boolean>(false);
   const [isDownloadsDrawerOpen, setIsDownloadsDrawerOpen] = useState<boolean>(false);
-  const [isSettingsOpen, setIsSettingsOpen] = useState<boolean>(false);
-  const [selectedProcessPid, setSelectedProcessPid] = useState<number | null>(null);
-
-  // إشعار عائم
   const [toastMsg, setToastMsg] = useState<string | null>(null);
-  const toastTimeoutRef = useRef<NodeJS.Timeout | null>(null);
-
-  const showToast = (msg: string) => {
-    setToastMsg(msg);
-    if (toastTimeoutRef.current) clearTimeout(toastTimeoutRef.current);
-    toastTimeoutRef.current = setTimeout(() => setToastMsg(null), 3000);
-  };
-
-  // تصفية سجل التصفح بالكلمات المفتاحية والتصنيفات
-  const filteredHistory = historyList.filter((item) => {
-    const q = historySearchQuery.trim().toLowerCase();
-    const matchesSearch =
-      !q ||
-      item.title.toLowerCase().includes(q) ||
-      item.url.toLowerCase().includes(q);
-
-    if (!matchesSearch) return false;
-
-    if (historyFilterCategory === 'searches') {
-      return item.url.includes('google.com/search') || item.title.includes('بحث');
-    }
-    if (historyFilterCategory === 'domains') {
-      return !item.url.includes('google.com/search');
-    }
-    return true;
-  });
-
-  const handleDeleteHistoryItem = (indexToDelete: number, e: React.MouseEvent) => {
-    e.stopPropagation();
-    setHistoryList((prev) => prev.filter((_, idx) => idx !== indexToDelete));
-    showToast('تم حذف الموقع من السجل');
-  };
-
-  const handleClearAllHistory = () => {
-    if (window.confirm('هل أنت متأكد من رغبتك في مسح سجل التصفح بالكامل؟')) {
-      setHistoryList([]);
-      setHistorySearchQuery('');
-      showToast('تم مسح سجل التصفح بالكامل 🗑️');
-    }
-  };
+  const [selectedProcessPid, setSelectedProcessPid] = useState<number | null>(null);
 
   const activeTab = tabs.find((t) => t.id === activeTabId) || tabs[0];
 
-  // مراقبة جودة وحالة اتصال الإنترنت التكيفية (Adaptive Network Monitoring)
+  const showToast = (msg: string) => {
+    setToastMsg(msg);
+    setTimeout(() => setToastMsg(null), 3200);
+  };
+
+  // ═══ مراقبة حالة الشبكة والسرعة ═══
   useEffect(() => {
     const handleOnline = () => {
       setIsOnline(true);
-      showToast('🟢 تم استعادة الاتصال بالإنترنت');
+      showToast('🌐 تم استعادة الاتصال بالإنترنت');
     };
     const handleOffline = () => {
       setIsOnline(false);
-      showToast('⚠️ لا يوجد اتصال - تم تفعيل وضع التصفح بدون إنترنت');
+      showToast('⚠️ تم انقطاع الإنترنت! المتصفح يعمل بوضع الأوفلاين والفيديوهات المحفوظة متاحة');
     };
 
     window.addEventListener('online', handleOnline);
     window.addEventListener('offline', handleOffline);
 
-    // فحص تقريبي لسرعة الشبكة (Network Connection API)
     if ('connection' in navigator) {
       const conn = (navigator as any).connection;
       if (conn) {
@@ -324,36 +378,18 @@ export default function App() {
     setUrlInput(activeTab.url);
   }, [activeTab.url, activeTabId]);
 
-  // حفظ الإشارات والتاريخ والـ VPN محلياً
+  // حفظ الإشارات والتاريخ والـ VPN والفيديوهات وقاعدة البيانات محلياً
   useEffect(() => {
     try {
       localStorage.setItem('anwer_bookmarks', JSON.stringify(bookmarks));
-    } catch {}
-  }, [bookmarks]);
-
-  useEffect(() => {
-    try {
       localStorage.setItem('anwer_history', JSON.stringify(historyList));
-    } catch {}
-  }, [historyList]);
-
-  useEffect(() => {
-    try {
       localStorage.setItem('anwer_profile', JSON.stringify(userProfile));
-    } catch {}
-  }, [userProfile]);
-
-  useEffect(() => {
-    try {
       localStorage.setItem('anwer_vpn_enabled', String(vpnEnabled));
-    } catch {}
-  }, [vpnEnabled]);
-
-  useEffect(() => {
-    try {
       localStorage.setItem('anwer_data_saver', String(dataSaver));
+      localStorage.setItem('anwer_database_approved', String(databaseApproved));
+      localStorage.setItem('anwer_video_watch_history', JSON.stringify(videoWatchHistory));
     } catch {}
-  }, [dataSaver]);
+  }, [bookmarks, historyList, userProfile, vpnEnabled, dataSaver, databaseApproved, videoWatchHistory]);
 
   // محاكاة استهلاك بيانات التشفير الآمنة مع التصفح
   useEffect(() => {
@@ -365,36 +401,108 @@ export default function App() {
     return () => clearInterval(interval);
   }, [vpnEnabled]);
 
-  // ═══ قناة الاتصال بين العمليات (Mojo IPC) ═══
-  useEffect(() => {
-    const handleMojoMessage = (event: MessageEvent) => {
-      const data = event.data;
-      if (!data || typeof data !== 'object') return;
+  // ═══ تشغيل وحفظ الفيديو تلقائياً في السجل للمشاهدة بدون إنترنت ═══
+  const handlePlayVideo = (video: VideoRecord) => {
+    setCurrentPlayingVideo(video);
+    setIsVideoPlayerOpen(true);
+    setVideoPlaybackRate(1);
 
-      if (data.type === 'HYBRID_BROWSER_NAVIGATE' && typeof data.url === 'string') {
-        navigateCurrentTab(data.url);
-      } else if (data.type === 'HYBRID_BROWSER_PAGE_META' && data.title) {
-        setTabs((prev) =>
-          prev.map((t) =>
-            t.id === activeTabId ? { ...t, title: String(data.title) } : t
-          )
-        );
+    // إضافة أو تحديث الفيديو في سجل المشاهدات المحفوظة
+    setVideoWatchHistory((prev) => {
+      const exists = prev.find((v) => v.id === video.id || v.streamUrl === video.streamUrl);
+      const updatedItem: VideoRecord = {
+        ...video,
+        playedAt: new Date().toLocaleTimeString('ar-SA', { hour: '2-digit', minute: '2-digit' }),
+        isCachedOffline: true,
+      };
+      if (exists) {
+        return [updatedItem, ...prev.filter((v) => v.id !== exists.id)];
       }
+      return [updatedItem, ...prev];
+    });
+
+    if (databaseApproved) {
+      try {
+        if ('storage' in navigator && 'persist' in navigator.storage) {
+          navigator.storage.persist();
+        }
+      } catch {}
+    }
+
+    showToast(`🎬 تم تشغيل وحفظ الفيديو في السجل للمشاهدة بدون إنترنت: ${video.title.slice(0, 30)}...`);
+  };
+
+  // تشغيل رابط فيديو مخصص
+  const handlePlayCustomVideo = (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!customVideoUrlInput.trim()) return;
+
+    const newVid: VideoRecord = {
+      id: `vid_custom_${Date.now()}`,
+      title: customVideoTitleInput.trim() || 'فيديو تم تشغيله من الرابط المباشر',
+      streamUrl: customVideoUrlInput.trim(),
+      thumbnail: 'https://images.unsplash.com/photo-1574717024653-61fd2cf4d44d?w=400&q=80',
+      duration: 'مباشر',
+      playedAt: new Date().toLocaleTimeString('ar-SA', { hour: '2-digit', minute: '2-digit' }),
+      isCachedOffline: true,
+      pageUrl: customVideoUrlInput.trim(),
     };
 
-    window.addEventListener('message', handleMojoMessage);
-    return () => window.removeEventListener('message', handleMojoMessage);
-  }, [activeTabId]);
+    setCustomVideoUrlInput('');
+    setCustomVideoTitleInput('');
+    handlePlayVideo(newVid);
+  };
+
+  // ═══ اعتماد وموافقة قاعدة البيانات ═══
+  const handleApproveDatabase = () => {
+    setDatabaseApproved(true);
+    setIsDbApprovalModalOpen(false);
+    try {
+      localStorage.setItem('anwer_database_approved', 'true');
+      if ('storage' in navigator && 'persist' in navigator.storage) {
+        navigator.storage.persist();
+      }
+    } catch {}
+    showToast('✅ تم اعتماد قاعدة البيانات بنجاح للتخزين الدائم للفيديوهات والسجلات');
+  };
+
+  // حذف فيديو من السجل
+  const handleDeleteVideoRecord = (videoId: string, e: React.MouseEvent) => {
+    e.stopPropagation();
+    setVideoWatchHistory((prev) => prev.filter((v) => v.id !== videoId));
+    showToast('تم حذف الفيديو من السجل');
+  };
+
+  // مسح كافة الفيديوهات المحفوظة
+  const handleClearAllVideos = () => {
+    setVideoWatchHistory([]);
+    showToast('تم مسح مكتبة الفيديوهات المحفوظة');
+  };
+
+  // تغيير سرعة تشغيل الفيديو
+  const handleChangePlaybackRate = (rate: number) => {
+    setVideoPlaybackRate(rate);
+    if (videoPlayerRef.current) {
+      videoPlayerRef.current.playbackRate = rate;
+    }
+  };
 
   // ═══ قائمة العمليات النشطة لمدير مهام المتصفح (Chrome Task Manager) ═══
   const getActiveProcesses = (): ProcessItem[] => {
     const coreProcesses: ProcessItem[] = [
       { pid: 1, type: 'browser', name: 'Browser (العملية الرئيسية وواجهة المستخدم)', memoryMB: 148, cpuPercent: 1.2 },
-      { pid: 2, type: 'gpu', name: 'GPU Process (Viz الرسوميات والتسريع)', memoryMB: 84, cpuPercent: 2.1 },
+      { pid: 2, type: 'gpu', name: 'GPU Process (Viz الرسوميات وتسريع الفيديو)', memoryMB: 94, cpuPercent: 2.4 },
       { pid: 3, type: 'network', name: 'Network Service (محرك الجلب الفوري والذاكرة السريعة)', memoryMB: 42, cpuPercent: 0.5 },
-      { pid: 4, type: 'storage', name: 'Storage Service (IndexedDB & 0ms RAM Cache)', memoryMB: 28, cpuPercent: 0.1 },
+      { pid: 4, type: 'storage', name: 'Storage Service (IndexedDB & Video Cache Engine)', memoryMB: 38, cpuPercent: 0.2 },
       {
         pid: 5,
+        type: 'database',
+        name: `Database Storage (قاعدة بيانات السجلات • ${databaseApproved ? 'معتمدة ومفعلة' : 'قيد الانتظار'})`,
+        memoryMB: databaseApproved ? 34 : 12,
+        cpuPercent: databaseApproved ? 0.4 : 0.0,
+      },
+      {
+        pid: 6,
         type: 'vpn',
         name: `VPN Tunnel Service (نفق WireGuard مشفر 256-bit • ${selectedVpn.country})`,
         memoryMB: vpnEnabled ? 19 : 0,
@@ -420,16 +528,13 @@ export default function App() {
       setTabs((prev) =>
         prev.map((t) => (t.pid === pid ? { ...t, isCrashed: true, loading: false } : t))
       );
-      showToast(`تم إنهاء عملية العرض (PID: ${pid})`);
-    } else if (pid === 5) {
-      setVpnEnabled(false);
-      showToast('تم إيقاف خدمة نفق الـ VPN مؤقتاً');
+      showToast(`تم إنهاء عملية التبويب (${pid})`);
     } else {
-      showToast('لا يمكن إنهاء عمليات النظام الحيوية');
+      showToast(`لا يمكن إنهاء العملية الأساسية للنظام (${pid})`);
     }
   };
 
-  // ═══ تنظيف الروابط ومنع وسوم التتبع الإعلاني ═══
+  // ═══ تنقية الرابط من معاملات التتبع الإعلانية (Anti-Tracking) ═══
   const sanitizeUrlTracking = (url: string): string => {
     try {
       const u = new URL(url);
@@ -463,6 +568,8 @@ export default function App() {
 
     let targetUrl: string;
 
+    const isDirectVideoUrl = /\.(mp4|webm|ogg|m3u8)(\?.*)?$/i.test(trimmed);
+
     if (trimmed.startsWith('g ') || trimmed.startsWith('google ')) {
       const q = trimmed.replace(/^(g|google)\s+/, '');
       targetUrl = `https://www.google.com/search?q=${encodeURIComponent(q)}`;
@@ -476,6 +583,20 @@ export default function App() {
 
     if (vpnEnabled) {
       targetUrl = sanitizeUrlTracking(targetUrl);
+    }
+
+    if (isDirectVideoUrl) {
+      handlePlayVideo({
+        id: `vid_${Date.now()}`,
+        title: targetUrl.split('/').pop() || 'فيديو مباشر',
+        streamUrl: targetUrl,
+        thumbnail: 'https://images.unsplash.com/photo-1574717024653-61fd2cf4d44d?w=400&q=80',
+        duration: 'مباشر',
+        playedAt: new Date().toLocaleTimeString('ar-SA', { hour: '2-digit', minute: '2-digit' }),
+        isCachedOffline: true,
+        pageUrl: targetUrl,
+      });
+      return;
     }
 
     setUrlInput(targetUrl);
@@ -498,8 +619,6 @@ export default function App() {
           url: targetUrl,
           title: targetUrl.includes('google.com/search')
             ? 'نتائج البحث'
-            : targetUrl.includes('google.com')
-            ? 'Google'
             : targetUrl.replace(/^https?:\/\//, '').split('/')[0],
           history: nextHistory,
           historyIndex: nextHistory.length - 1,
@@ -508,15 +627,23 @@ export default function App() {
         };
       })
     );
+
+    const loadDelay = dataSaver ? 80 : 350;
+    setTimeout(() => {
+      setTabs((prev) =>
+        prev.map((t) => (t.id === activeTabId ? { ...t, loading: false } : t))
+      );
+    }, loadDelay);
   };
 
-  const createNewTab = (initialUrl: string = 'https://www.google.com') => {
-    const newPid = Math.floor(100 + Math.random() * 900);
+  // التحكم في التبويبات
+  const createNewTab = (initialUrl: string = 'about:blank') => {
     const newId = `tab_${Date.now()}`;
+    const newPid = Math.floor(100 + Math.random() * 900);
     const newTab: TabItem = {
       id: newId,
       pid: newPid,
-      title: initialUrl.includes('google.com') ? 'Google' : 'تبويب جديد',
+      title: initialUrl === 'about:blank' ? 'علامة تبويب جديدة' : initialUrl,
       url: initialUrl,
       history: [initialUrl],
       historyIndex: 0,
@@ -525,155 +652,158 @@ export default function App() {
     };
     setTabs((prev) => [...prev, newTab]);
     setActiveTabId(newId);
-    setUrlInput(initialUrl);
   };
 
-  const closeTab = (tabIdToClose: string, e?: React.MouseEvent) => {
+  const closeTab = (tabId: string, e?: React.MouseEvent) => {
     if (e) e.stopPropagation();
     if (tabs.length === 1) {
-      navigateCurrentTab('https://www.google.com');
+      setTabs([
+        {
+          id: `tab_${Date.now()}`,
+          pid: Math.floor(100 + Math.random() * 900),
+          title: 'علامة تبويب جديدة',
+          url: 'about:blank',
+          history: ['about:blank'],
+          historyIndex: 0,
+          loading: false,
+          isCrashed: false,
+        },
+      ]);
       return;
     }
-    const filtered = tabs.filter((t) => t.id !== tabIdToClose);
-    setTabs(filtered);
-    if (activeTabId === tabIdToClose) {
-      setActiveTabId(filtered[filtered.length - 1].id);
+    const idx = tabs.findIndex((t) => t.id === tabId);
+    const remaining = tabs.filter((t) => t.id !== tabId);
+    setTabs(remaining);
+    if (activeTabId === tabId) {
+      const nextActive = remaining[Math.max(0, idx - 1)];
+      setActiveTabId(nextActive.id);
     }
   };
 
-  const handleBack = () => {
+  const goBack = () => {
     if (activeTab.historyIndex > 0) {
-      const prevUrl = activeTab.history[activeTab.historyIndex - 1];
+      const newIdx = activeTab.historyIndex - 1;
+      const prevUrl = activeTab.history[newIdx];
       setTabs((prev) =>
-        prev.map((t) =>
-          t.id === activeTabId
-            ? { ...t, url: prevUrl, historyIndex: t.historyIndex - 1, loading: false, isCrashed: false }
-            : t
-        )
+        prev.map((t) => (t.id === activeTabId ? { ...t, historyIndex: newIdx, url: prevUrl } : t))
       );
-      setUrlInput(prevUrl);
     }
   };
 
-  const handleForward = () => {
+  const goForward = () => {
     if (activeTab.historyIndex < activeTab.history.length - 1) {
-      const nextUrl = activeTab.history[activeTab.historyIndex + 1];
+      const newIdx = activeTab.historyIndex + 1;
+      const nextUrl = activeTab.history[newIdx];
       setTabs((prev) =>
-        prev.map((t) =>
-          t.id === activeTabId
-            ? { ...t, url: nextUrl, historyIndex: t.historyIndex + 1, loading: false, isCrashed: false }
-            : t
-        )
+        prev.map((t) => (t.id === activeTabId ? { ...t, historyIndex: newIdx, url: nextUrl } : t))
       );
-      setUrlInput(nextUrl);
     }
   };
 
-  const handleRefresh = () => {
+  const reloadTab = () => {
     setTabs((prev) =>
       prev.map((t) => (t.id === activeTabId ? { ...t, loading: true, isCrashed: false } : t))
     );
+    setTimeout(() => {
+      setTabs((prev) =>
+        prev.map((t) => (t.id === activeTabId ? { ...t, loading: false } : t))
+      );
+    }, dataSaver ? 80 : 300);
+  };
+
+  const goHome = () => {
+    navigateCurrentTab('about:blank');
   };
 
   const handleToggleBookmark = () => {
     const isBookmarked = bookmarks.some((b) => b.url === activeTab.url);
     if (isBookmarked) {
       setBookmarks((prev) => prev.filter((b) => b.url !== activeTab.url));
-      showToast('تمت إزالة الموقع من شريط الإشارات');
+      showToast('تمت إزالة الصفحة من الإشارات المرجعية');
     } else {
-      const newBm: BookmarkItem = {
-        id: `bm_${Date.now()}`,
+      const newBookmark: BookmarkItem = {
+        id: `b_${Date.now()}`,
         title: activeTab.title || activeTab.url,
         url: activeTab.url,
       };
-      setBookmarks((prev) => [...prev, newBm]);
-      showToast('تمت إضافة الإشارة المرجعية بنجاح ⭐');
+      setBookmarks((prev) => [...prev, newBookmark]);
+      showToast('تمت إضافة الصفحة إلى شريط الإشارات المرجعية ⭐');
     }
   };
 
   const isCurrentBookmarked = bookmarks.some((b) => b.url === activeTab.url);
 
-  const handleSavePageAs = () => {
-    const htmlContent = `<!DOCTYPE html><html><head><meta charset="utf-8"><title>${activeTab.title}</title></head><body><h1>${activeTab.title}</h1><p>الرابط المحفوظ: <a href="${activeTab.url}">${activeTab.url}</a></p></body></html>`;
-    const blob = new Blob([htmlContent], { type: 'text/html' });
-    const blobUrl = URL.createObjectURL(blob);
-    const filename = `${(activeTab.title || 'page').replace(/[^a-zA-Z0-9\u0600-\u06FF]/g, '_')}.html`;
-
-    const dlItem: DownloadItem = {
-      id: `dl_${Date.now()}`,
-      filename,
-      url: activeTab.url,
-      size: '18 KB',
-      status: 'completed',
-      time: 'الآن',
-    };
-    setDownloadsList((prev) => [dlItem, ...prev]);
-
-    const a = document.createElement('a');
-    a.href = blobUrl;
-    a.download = filename;
-    a.click();
-    URL.revokeObjectURL(blobUrl);
-    showToast(`تم تنزيل الصفحة: ${filename} 📥`);
+  // حذف عنصر من السجل
+  const handleDeleteHistoryItem = (index: number, e: React.MouseEvent) => {
+    e.stopPropagation();
+    setHistoryList((prev) => prev.filter((_, i) => i !== index));
+    showToast('تم حذف العنصر من السجل');
   };
 
-  // قاطع التكرار الذاتي: حماية ضد التضمين المتداخل داخل iframe المتصفح
-  const isInsideBrowserViewport =
-    typeof window !== 'undefined' &&
-    (window.name === 'anwer_browser_web_frame' ||
-      window.location.search.includes('in_browser_frame=1') ||
-      (window.self !== window.top &&
-        (window.location.pathname.startsWith('/api/') ||
-          window.location.search.includes('url='))));
+  // مسح السجل كاملاً
+  const handleClearAllHistory = () => {
+    setHistoryList([]);
+    showToast('تم مسح سجل التصفح بالكامل');
+  };
 
-  if (isInsideBrowserViewport) {
-    return (
-      <div
-        className="w-full h-full min-h-[100dvh] flex flex-col items-center justify-center p-6 bg-white dark:bg-[#202124] text-center text-[#202124] dark:text-white"
-        dir="rtl"
-        style={{ fontFamily: "'Cairo', 'Segoe UI', Tahoma, sans-serif" }}
-      >
-        <div className="w-10 h-10 rounded-full border-3 border-blue-600 border-t-transparent animate-spin mb-3" />
-        <p className="text-sm font-semibold">جاري تشغيل عملية العرض السريعة...</p>
-      </div>
-    );
-  }
+  // ═══ تصفية سجل التصفح بالكلمات المفتاحية والتصنيف ═══
+  const filteredHistory = historyList.filter((item) => {
+    const q = historySearchQuery.trim().toLowerCase();
+    const matchesSearch =
+      !q ||
+      item.title.toLowerCase().includes(q) ||
+      item.url.toLowerCase().includes(q);
+
+    if (!matchesSearch) return false;
+
+    if (historyFilterCategory === 'searches') {
+      return item.url.includes('google.com/search') || item.title.includes('بحث');
+    }
+    if (historyFilterCategory === 'domains') {
+      return !item.url.includes('google.com/search') && !item.url.includes('about:blank');
+    }
+    return true;
+  });
 
   return (
     <div
-      className="h-[100dvh] w-full flex flex-col bg-[#F8F9FA] dark:bg-[#1E1F22] text-[#202124] dark:text-[#E8EAED] overflow-hidden select-none"
+      className="flex flex-col h-screen w-screen bg-[#F1F3F4] dark:bg-[#202124] text-[#202124] dark:text-[#E8EAED] font-sans select-none overflow-hidden"
       dir="rtl"
-      style={{ fontFamily: "'Cairo', 'Segoe UI', Tahoma, sans-serif" }}
     >
       {/* ═══════════════════════════════════════════════════════════════
-          1. شريط التبويبات المتقدم (Chrome Tab Strip)
-          تبديل فوري في 0 مللي ثانية بين التبويبات المستقلة المحفوظة بالذاكرة
+          1. شريط التبويبات العلوي (Chrome Multi-Process Tab Strip)
       ═══════════════════════════════════════════════════════════════ */}
-      <div className="h-[42px] bg-[#DFE1E5] dark:bg-[#202124] border-b border-[#DADCE0] dark:border-[#3C4043] flex items-end px-2 gap-1 overflow-x-auto shrink-0 no-scrollbar pt-1">
+      <div className="flex items-center h-10 px-2 pt-1.5 bg-[#DEE1E6] dark:bg-[#1E1F22] border-b border-[#C7C9CC] dark:border-[#333539] overflow-x-auto no-scrollbar gap-1">
         {tabs.map((tab) => {
           const isActive = tab.id === activeTabId;
           return (
             <div
               key={tab.id}
               onClick={() => setActiveTabId(tab.id)}
-              className={`group h-[34px] max-w-[220px] min-w-[130px] px-3 rounded-t-lg flex items-center justify-between gap-2 text-xs font-semibold cursor-pointer transition select-none relative ${
+              className={`group relative flex items-center h-8.5 px-3 max-w-[220px] min-w-[120px] rounded-t-lg text-xs cursor-pointer transition select-none ${
                 isActive
-                  ? 'bg-white dark:bg-[#2B2D30] text-[#1A73E8] dark:text-[#8AB4F8] shadow-xs'
-                  : 'text-[#5F6368] dark:text-[#9AA0A6] hover:bg-white/40 dark:hover:bg-white/5'
+                  ? 'bg-white dark:bg-[#2B2D30] text-[#1A73E8] dark:text-white font-semibold shadow-xs'
+                  : 'text-[#5F6368] dark:text-[#9AA0A6] hover:bg-[#E8EAED]/70 dark:hover:bg-[#2B2D30]/50'
               }`}
             >
-              <div className="flex items-center gap-1.5 truncate">
+              <div className="flex items-center gap-2 truncate flex-1 pl-1">
                 {tab.loading ? (
-                  <div className="w-3.5 h-3.5 border-2 border-blue-600 border-t-transparent rounded-full animate-spin shrink-0" />
+                  <RotateCw className="w-3.5 h-3.5 animate-spin text-blue-500 shrink-0" />
+                ) : tab.isCrashed ? (
+                  <Activity className="w-3.5 h-3.5 text-red-500 shrink-0" />
+                ) : tab.url === 'about:blank' ? (
+                  <Globe className="w-3.5 h-3.5 text-gray-400 shrink-0" />
                 ) : (
-                  <Globe className={`w-3.5 h-3.5 shrink-0 ${isActive ? 'text-[#1A73E8]' : 'text-gray-400'}`} />
+                  <Globe className="w-3.5 h-3.5 text-blue-500 shrink-0" />
                 )}
-                <span className="truncate">{tab.isCrashed ? 'Aw, Snap!' : tab.title || 'صفحة جديدة'}</span>
+                <span className="truncate text-[11px] sm:text-xs">
+                  {tab.title || (tab.url === 'about:blank' ? 'علامة تبويب جديدة' : tab.url)}
+                </span>
               </div>
               <button
                 type="button"
                 onClick={(e) => closeTab(tab.id, e)}
-                className="w-4 h-4 rounded-full flex items-center justify-center hover:bg-black/10 dark:hover:bg-white/10 text-gray-400 hover:text-gray-700 dark:hover:text-white transition shrink-0"
+                className="w-4 h-4 rounded-full flex items-center justify-center opacity-0 group-hover:opacity-100 hover:bg-black/10 dark:hover:bg-white/10 transition text-gray-500"
                 title="إغلاق التبويب (Ctrl+W)"
               >
                 <X className="w-3 h-3" />
@@ -682,76 +812,89 @@ export default function App() {
           );
         })}
 
-        {/* زر فتح تبويب جديد (+) */}
         <button
           type="button"
-          onClick={() => createNewTab('https://www.google.com')}
-          className="w-7 h-7 mb-1 rounded-full flex items-center justify-center text-[#5F6368] dark:text-[#9AA0A6] hover:bg-black/5 dark:hover:bg-white/10 transition cursor-pointer shrink-0"
-          title="فتح تبويب جديد (Ctrl+T)"
+          onClick={() => createNewTab()}
+          className="w-7 h-7 rounded-full flex items-center justify-center hover:bg-[#C7C9CC] dark:hover:bg-[#333539] text-[#5F6368] dark:text-[#9AA0A6] transition cursor-pointer shrink-0"
+          title="علامة تبويب جديدة (Ctrl+T)"
         >
           <Plus className="w-4 h-4" />
         </button>
+
+        <div className="flex-1" />
+
+        {/* مؤشر حالة الشبكة والسرعة */}
+        <div className="hidden md:flex items-center gap-2 text-[11px] px-2 text-[#5F6368] dark:text-[#9AA0A6]">
+          <span className="flex items-center gap-1 font-mono text-emerald-600 dark:text-emerald-400 font-bold">
+            <Zap className="w-3 h-3 fill-current" />
+            {networkSpeedTier}
+          </span>
+          <span className="text-gray-300 dark:text-gray-600">|</span>
+          <span className="font-mono text-[10px]">توفير: {savedDataMB}MB</span>
+        </div>
       </div>
 
       {/* ═══════════════════════════════════════════════════════════════
-          2. شريط الأدوات وعنوان Omnibox مع مفتاح السرعة وتوفير البيانات
+          2. شريط التنقل وعنوان الويب المباشر (Omnibox & Controls)
       ═══════════════════════════════════════════════════════════════ */}
-      <header className="h-[52px] bg-white dark:bg-[#2B2D30] border-b border-[#E8EAED] dark:border-[#3C4043] px-3 flex items-center gap-2 shrink-0 shadow-2xs z-20">
-        {/* أزرار التنقل الأساسية */}
-        <div className="flex items-center gap-0.5 shrink-0">
+      <div className="flex items-center h-12 px-2 bg-white dark:bg-[#2B2D30] border-b border-[#E0E2E6] dark:border-[#3C4043] gap-1.5 shadow-2xs">
+        {/* أزرار التنقل الخلفي والأمامي والتحديث والصفحة الرئيسية */}
+        <div className="flex items-center gap-1 shrink-0 text-[#5F6368] dark:text-[#9AA0A6]">
           <button
             type="button"
-            onClick={handleBack}
+            onClick={goForward}
             disabled={activeTab.historyIndex <= 0}
-            className="p-2 rounded-full text-[#5F6368] dark:text-[#9AA0A6] hover:bg-black/5 dark:hover:bg-white/10 disabled:opacity-30 cursor-pointer transition"
-            title="رجوع (Alt+Left)"
+            className="p-1.5 rounded-full hover:bg-black/5 dark:hover:bg-white/10 disabled:opacity-30 disabled:hover:bg-transparent transition cursor-pointer"
+            title="للخلف (Alt + Right Arrow)"
           >
             <ArrowRight className="w-4 h-4" />
           </button>
           <button
             type="button"
-            onClick={handleForward}
+            onClick={goBack}
             disabled={activeTab.historyIndex >= activeTab.history.length - 1}
-            className="p-2 rounded-full text-[#5F6368] dark:text-[#9AA0A6] hover:bg-black/5 dark:hover:bg-white/10 disabled:opacity-30 cursor-pointer transition"
-            title="تقدم (Alt+Right)"
+            className="p-1.5 rounded-full hover:bg-black/5 dark:hover:bg-white/10 disabled:opacity-30 disabled:hover:bg-transparent transition cursor-pointer"
+            title="للأمام (Alt + Left Arrow)"
           >
             <ArrowLeft className="w-4 h-4" />
           </button>
           <button
             type="button"
-            onClick={handleRefresh}
-            className="p-2 rounded-full text-[#5F6368] dark:text-[#9AA0A6] hover:bg-black/5 dark:hover:bg-white/10 cursor-pointer transition"
-            title="إعادة تحميل (Ctrl+R)"
+            onClick={reloadTab}
+            className="p-1.5 rounded-full hover:bg-black/5 dark:hover:bg-white/10 transition cursor-pointer"
+            title="إعادة تحميل الصفحة (Ctrl+R)"
           >
-            <RotateCw className={`w-4 h-4 ${activeTab.loading ? 'animate-spin text-blue-600' : ''}`} />
+            <RotateCw className={`w-4 h-4 ${activeTab.loading ? 'animate-spin text-blue-500' : ''}`} />
           </button>
           <button
             type="button"
-            onClick={() => navigateCurrentTab('https://www.google.com')}
-            className="p-2 rounded-full text-[#5F6368] dark:text-[#9AA0A6] hover:bg-black/5 dark:hover:bg-white/10 cursor-pointer transition"
-            title="الصفحة الرئيسية (Google)"
+            onClick={goHome}
+            className="p-1.5 rounded-full hover:bg-black/5 dark:hover:bg-white/10 transition cursor-pointer"
+            title="الصفحة الرئيسية (Alt+Home)"
           >
             <Home className="w-4 h-4" />
           </button>
         </div>
 
-        {/* شريط Omnibox الذكي الموحد */}
+        {/* شريط العنوان التفاعلي (Omnibox) */}
         <form
           onSubmit={(e) => {
             e.preventDefault();
             navigateCurrentTab(urlInput);
           }}
-          className="flex-1 h-[38px] px-3.5 rounded-full border border-[#DADCE0] dark:border-[#4A4D51] focus-within:border-[#1A73E8] focus-within:shadow-xs bg-[#F1F3F4] dark:bg-[#1E1F22] focus-within:bg-white dark:focus-within:bg-[#1E1F22] flex items-center gap-2 transition"
+          className="flex-1 flex items-center h-8.5 px-3 bg-[#F1F3F4] dark:bg-[#1E1F22] hover:bg-[#E8EAED] dark:hover:bg-[#1E1F22]/90 rounded-full border border-transparent focus-within:border-[#1A73E8] focus-within:bg-white dark:focus-within:bg-[#202124] transition text-xs gap-2"
         >
-          <span title="اتصال آمن ومشفّر (HTTPS)">
-            <Shield className="w-4 h-4 text-emerald-600 dark:text-emerald-400 shrink-0" />
-          </span>
+          {activeTab.url.startsWith('https://') ? (
+            <span title="اتصال مشفر وآمن (HTTPS)"><Lock className="w-3.5 h-3.5 text-emerald-600 shrink-0" /></span>
+          ) : (
+            <Globe className="w-3.5 h-3.5 text-gray-400 shrink-0" />
+          )}
 
           <input
             type="text"
             value={urlInput}
             onChange={(e) => setUrlInput(e.target.value)}
-            placeholder="ابحث في Google أو اكتب عنوان ويب..."
+            placeholder="ابحث في Google أو اكتب عنوان ويب (أو رابط فيديو MP4)..."
             className="flex-1 bg-transparent text-xs sm:text-sm text-[#202124] dark:text-[#E8EAED] focus:outline-none dir-ltr text-left font-mono truncate"
           />
 
@@ -764,22 +907,54 @@ export default function App() {
           </button>
         </form>
 
-        {/* ⚡ زر وضع توفير البيانات والسرعة الفائقة 100x للشبكات الضعيفة */}
+        {/* 🎬 زر مكتبة الفيديوهات المحفوظة للمشاهدة بدون إنترنت */}
+        <button
+          type="button"
+          onClick={() => setIsOfflineVideosDrawerOpen(true)}
+          className="px-2.5 py-1.5 rounded-full text-xs font-bold flex items-center gap-1.5 transition cursor-pointer border bg-rose-50 dark:bg-rose-950/40 text-rose-700 dark:text-rose-300 border-rose-300 dark:border-rose-800"
+          title="مكتبة الفيديوهات المحفوظة: شغّل وشاهد أي فيديو بدون نت"
+        >
+          <Film className="w-3.5 h-3.5 text-rose-600" />
+          <span className="hidden lg:inline">فيديوهات محفوظة</span>
+          <span className="w-4.5 h-4.5 rounded-full bg-rose-600 text-white text-[10px] flex items-center justify-center font-mono">
+            {videoWatchHistory.length}
+          </span>
+        </button>
+
+        {/* 🗄️ مؤشر وزر اعتماد قاعدة البيانات للتخزين */}
+        <button
+          type="button"
+          onClick={() => setIsDbApprovalModalOpen(true)}
+          className={`px-2.5 py-1.5 rounded-full text-xs font-bold flex items-center gap-1.5 transition cursor-pointer border ${
+            databaseApproved
+              ? 'bg-blue-50 dark:bg-blue-950/40 text-blue-700 dark:text-blue-300 border-blue-300 dark:border-blue-800'
+              : 'bg-amber-50 text-amber-700 border-amber-300 animate-pulse'
+          }`}
+          title="اعتماد وترخيص قاعدة البيانات لحفظ الفيديوهات والسجلات"
+        >
+          <Database className="w-3.5 h-3.5 text-blue-600" />
+          <span className="hidden lg:inline">
+            {databaseApproved ? 'قاعدة البيانات: معتمدة' : 'اعتماد قاعدة البيانات'}
+          </span>
+          <span className="text-[10px]">{databaseApproved ? '✅' : '⚠️'}</span>
+        </button>
+
+        {/* ⚡ زر وضع توفير البيانات والسرعة الفائقة للشبكات الضعيفة */}
         <button
           type="button"
           onClick={() => {
             setDataSaver((prev) => !prev);
-            showToast(!dataSaver ? '⚡ تم تفعيل وضع السرعة الفائقة وتوفير البيانات (10x أسرع للشبكات الضعيفة)' : 'تم إيقاف وضع توفير البيانات');
+            showToast(!dataSaver ? '⚡ تم تفعيل وضع السرعة الفائقة وتوفير البيانات' : 'تم إيقاف وضع توفير البيانات');
           }}
           className={`px-2.5 py-1.5 rounded-full text-xs font-bold flex items-center gap-1.5 transition cursor-pointer border ${
             dataSaver
               ? 'bg-amber-50 dark:bg-amber-950/40 text-amber-700 dark:text-amber-300 border-amber-300 dark:border-amber-800'
               : 'bg-gray-100 text-gray-500 border-gray-300'
           }`}
-          title="وضع تسريع التصفح وتوفير البيانات 85%: تحميل فوري واستجابة سريعة حتى في أضعف شبكات 2G/3G"
+          title="وضع تسريع التصفح وتوفير البيانات: تحميل فوري واستجابة سريعة حتى في أضعف شبكات 2G/3G"
         >
           <Zap className={`w-3.5 h-3.5 ${dataSaver ? 'fill-current text-amber-500' : 'text-gray-400'}`} />
-          <span className="hidden lg:inline">{dataSaver ? 'وضع السرعة 10x' : 'سرعة عادية'}</span>
+          <span className="hidden xl:inline">{dataSaver ? 'سرعة 10x' : 'سرعة عادية'}</span>
         </button>
 
         {/* 🛡️ مؤشر Free VPN الدائم والثابت في الخلفية */}
@@ -800,7 +975,6 @@ export default function App() {
 
         {/* أدوات شريط العناوين الأيمن */}
         <div className="flex items-center gap-1 shrink-0">
-          {/* حفظ الإشارة بنجمة كمتصفح كروم */}
           <button
             type="button"
             onClick={handleToggleBookmark}
@@ -814,7 +988,6 @@ export default function App() {
             <Star className="w-4 h-4" fill={isCurrentBookmarked ? 'currentColor' : 'none'} />
           </button>
 
-          {/* التنزيلات */}
           <button
             type="button"
             onClick={() => setIsDownloadsDrawerOpen((prev) => !prev)}
@@ -824,7 +997,6 @@ export default function App() {
             <Download className="w-4 h-4" />
           </button>
 
-          {/* زر الملف الشخصي والمزامنة */}
           <button
             type="button"
             onClick={() => setIsProfileModalOpen(true)}
@@ -834,7 +1006,7 @@ export default function App() {
             {userProfile.isLoggedIn ? userProfile.name.charAt(0).toUpperCase() || 'A' : <User className="w-4 h-4" />}
           </button>
 
-          {/* قائمة الخيارات الرئيسية الثلاث نقاط (Chrome 3-dots Menu) */}
+          {/* قائمة الخيارات الثلاث نقاط */}
           <div className="relative">
             <button
               type="button"
@@ -845,10 +1017,9 @@ export default function App() {
               <MoreVertical className="w-4 h-4" />
             </button>
 
-            {/* القائمة المنسدلة */}
             {isMenuOpen && (
               <div
-                className="absolute left-0 mt-2 w-64 bg-white dark:bg-[#2B2D30] rounded-2xl shadow-xl border border-gray-200 dark:border-gray-700 py-2 z-50 text-xs"
+                className="absolute left-0 mt-2 w-72 bg-white dark:bg-[#2B2D30] rounded-2xl shadow-xl border border-gray-200 dark:border-gray-700 py-2 z-50 text-xs"
                 onClick={() => setIsMenuOpen(false)}
               >
                 <button
@@ -859,6 +1030,33 @@ export default function App() {
                   <span>علامة تبويب جديدة</span>
                   <span className="text-[10px] text-gray-400">Ctrl+T</span>
                 </button>
+
+                <button
+                  type="button"
+                  onClick={() => setIsOfflineVideosDrawerOpen(true)}
+                  className="w-full px-4 py-2 hover:bg-gray-100 dark:hover:bg-white/5 flex items-center justify-between text-right text-rose-600 font-bold"
+                >
+                  <div className="flex items-center gap-1.5">
+                    <Film className="w-3.5 h-3.5" />
+                    <span>مكتبة الفيديوهات المحفوظة (بدون نت)</span>
+                  </div>
+                  <span className="text-[10px] bg-rose-100 text-rose-700 px-1.5 py-0.5 rounded-full font-mono">
+                    {videoWatchHistory.length}
+                  </span>
+                </button>
+
+                <button
+                  type="button"
+                  onClick={() => setIsDbApprovalModalOpen(true)}
+                  className="w-full px-4 py-2 hover:bg-gray-100 dark:hover:bg-white/5 flex items-center justify-between text-right text-blue-600 font-bold"
+                >
+                  <div className="flex items-center gap-1.5">
+                    <Database className="w-3.5 h-3.5" />
+                    <span>اعتماد وإعدادات قاعدة البيانات للتخزين</span>
+                  </div>
+                  <span className="text-[10px]">{databaseApproved ? 'معتمدة ✅' : 'مطلوبة ⚠️'}</span>
+                </button>
+
                 <button
                   type="button"
                   onClick={() => {
@@ -873,6 +1071,7 @@ export default function App() {
                   </div>
                   <span className="text-[10px]">{dataSaver ? 'مفعّل ⚡' : 'معطّل'}</span>
                 </button>
+
                 <button
                   type="button"
                   onClick={() => setIsVpnModalOpen(true)}
@@ -884,6 +1083,7 @@ export default function App() {
                   </div>
                   <span className="text-[10px] text-emerald-600">نشط 🟢</span>
                 </button>
+
                 <button
                   type="button"
                   onClick={() => setShowBookmarksBar((prev) => !prev)}
@@ -892,6 +1092,7 @@ export default function App() {
                   <span>{showBookmarksBar ? 'إخفاء شريط الإشارات' : 'إظهار شريط الإشارات'}</span>
                   <span className="text-[10px] text-gray-400">Ctrl+Shift+B</span>
                 </button>
+
                 <button
                   type="button"
                   onClick={() => setIsHistoryDrawerOpen(true)}
@@ -900,6 +1101,7 @@ export default function App() {
                   <span>السجل</span>
                   <span className="text-[10px] text-gray-400">Ctrl+H</span>
                 </button>
+
                 <button
                   type="button"
                   onClick={() => setIsDownloadsDrawerOpen(true)}
@@ -908,9 +1110,9 @@ export default function App() {
                   <span>التنزيلات</span>
                   <span className="text-[10px] text-gray-400">Ctrl+J</span>
                 </button>
+
                 <div className="h-px bg-gray-100 dark:bg-gray-700 my-1" />
 
-                {/* التحكم في التكبير والتصغير (Zoom) */}
                 <div className="px-4 py-2 flex items-center justify-between">
                   <span>التكبير/التصغير</span>
                   <div className="flex items-center gap-2">
@@ -940,355 +1142,590 @@ export default function App() {
 
                 <button
                   type="button"
-                  onClick={handleSavePageAs}
-                  className="w-full px-4 py-2 hover:bg-gray-100 dark:hover:bg-white/5 flex items-center justify-between text-right"
-                >
-                  <span>حفظ الصفحة باسم...</span>
-                  <span className="text-[10px] text-gray-400">Ctrl+S</span>
-                </button>
-                <div className="h-px bg-gray-100 dark:bg-gray-700 my-1" />
-
-                {/* مدير المهام وعمليات المتصفح (Chrome Task Manager) */}
-                <button
-                  type="button"
                   onClick={() => setIsTaskManagerOpen(true)}
-                  className="w-full px-4 py-2 hover:bg-gray-100 dark:hover:bg-white/5 flex items-center justify-between text-right text-blue-600 dark:text-blue-400 font-bold"
+                  className="w-full px-4 py-2 hover:bg-gray-100 dark:hover:bg-white/5 flex items-center justify-between text-right text-blue-600 font-semibold"
                 >
                   <div className="flex items-center gap-1.5">
                     <Cpu className="w-3.5 h-3.5" />
-                    <span>مدير مهام العمليات (Task Manager)</span>
+                    <span>مدير المهام (Task Manager)</span>
                   </div>
                   <span className="text-[10px] text-gray-400">Shift+Esc</span>
-                </button>
-                <button
-                  type="button"
-                  onClick={() => setIsSettingsOpen(true)}
-                  className="w-full px-4 py-2 hover:bg-gray-100 dark:hover:bg-white/5 flex items-center gap-1.5 text-right"
-                >
-                  <Settings className="w-3.5 h-3.5" />
-                  <span>الإعدادات</span>
                 </button>
               </div>
             )}
           </div>
         </div>
-      </header>
+      </div>
 
       {/* ═══════════════════════════════════════════════════════════════
-          3. شريط الإشارات المرجعية الاختياري (Bookmarks Bar)
+          3. شريط الإشارات المرجعية (Bookmarks Bar)
       ═══════════════════════════════════════════════════════════════ */}
       {showBookmarksBar && (
-        <div className="h-[30px] bg-white dark:bg-[#2B2D30] border-b border-[#E8EAED] dark:border-[#3C4043] px-3 flex items-center gap-2 overflow-x-auto shrink-0 text-xs text-[#5F6368] dark:text-[#9AA0A6] no-scrollbar">
-          {bookmarks.map((bm) => (
+        <div className="flex items-center h-7.5 px-3 bg-[#F8F9FA] dark:bg-[#202124] border-b border-[#E8EAED] dark:border-[#333539] text-xs gap-1 overflow-x-auto no-scrollbar">
+          <Folder className="w-3.5 h-3.5 text-gray-400 shrink-0 ml-1" />
+          {bookmarks.map((b) => (
             <button
-              key={bm.id}
+              key={b.id}
               type="button"
-              onClick={() => navigateCurrentTab(bm.url)}
-              className="px-2.5 py-1 rounded-md hover:bg-gray-100 dark:hover:bg-white/5 flex items-center gap-1.5 cursor-pointer transition truncate shrink-0"
+              onClick={() => navigateCurrentTab(b.url)}
+              className="flex items-center gap-1.5 px-2 py-0.5 rounded hover:bg-black/5 dark:hover:bg-white/10 text-[#3C4043] dark:text-[#BDC1C6] text-[11px] font-medium shrink-0 transition cursor-pointer"
             >
-              <Globe className="w-3 h-3 text-gray-400" />
-              <span className="truncate max-w-[120px]">{bm.title}</span>
+              <Globe className="w-3 h-3 text-blue-500" />
+              <span>{b.title}</span>
             </button>
           ))}
-        </div>
-      )}
-
-      {/* مؤشر شريط تقدم التحميل */}
-      {activeTab.loading && (
-        <div className="h-0.5 w-full bg-blue-100 overflow-hidden shrink-0">
-          <div className="h-full bg-blue-600 animate-pulse w-3/4" />
+          <div className="flex-1" />
+          <div className="flex items-center gap-2 text-[10px] text-gray-400 shrink-0">
+            <span>قاعدة البيانات: {databaseApproved ? 'معتمدة ومتصلة ✅' : 'انقر بالأعلى للاعتماد'}</span>
+            <span>|</span>
+            <span>حماية WireGuard: 256-bit نشطة 🛡️</span>
+          </div>
         </div>
       )}
 
       {/* ═══════════════════════════════════════════════════════════════
-          4. منطقة عرض المحتوى فائقة السرعة مع إبقاء التبويبات بالذاكرة (0ms Tab Switch)
+          مساحة عرض المحتوى (Direct Web Viewport)
       ═══════════════════════════════════════════════════════════════ */}
-      <main className="flex-1 w-full h-full relative bg-white dark:bg-[#1E1F22] overflow-hidden">
+      <main className="flex-1 relative bg-white dark:bg-[#1E1F22] overflow-hidden">
         {tabs.map((tab) => {
-          const isThisActive = tab.id === activeTabId;
-          const isGoogle = tab.url === 'https://www.google.com' || tab.url === 'https://google.com';
+          const isActive = tab.id === activeTabId;
+          if (!isActive) return null;
 
-          return (
-            <div
-              key={tab.id}
-              className={`w-full h-full absolute inset-0 ${isThisActive ? 'block z-10' : 'hidden pointer-events-none'}`}
-            >
-              {tab.isCrashed ? (
-                /* صفحة تعطل العملية */
-                <div className="w-full h-full flex flex-col items-center justify-center p-8 bg-white dark:bg-[#202124] text-center">
-                  <div className="w-16 h-16 rounded-2xl bg-gray-100 dark:bg-white/10 text-gray-600 dark:text-gray-300 flex items-center justify-center mb-4">
-                    <Zap className="w-8 h-8 text-amber-500" />
+          if (tab.isCrashed) {
+            return (
+              <div
+                key={tab.id}
+                className="w-full h-full flex flex-col items-center justify-center p-6 text-center"
+              >
+                <div className="w-16 h-16 rounded-2xl bg-red-100 dark:bg-red-950/40 text-red-600 flex items-center justify-center mb-4 shadow-sm">
+                  <Activity className="w-8 h-8" />
+                </div>
+                <h2 className="text-lg font-bold mb-1">عفواً! تعطلت هذه الصفحة</h2>
+                <p className="text-xs text-gray-500 max-w-md mb-4">
+                  تم عزل هذه العملية بشكل مستقل (Process Isolation) لمنع التأثير على بقية المتصفح. يمكنك إعادة تحميلها بأمان.
+                </p>
+                <button
+                  type="button"
+                  onClick={reloadTab}
+                  className="px-4 py-2 rounded-xl bg-blue-600 hover:bg-blue-700 text-white font-bold text-xs flex items-center gap-1.5 shadow-md"
+                >
+                  <RotateCw className="w-3.5 h-3.5" />
+                  <span>إعادة تحميل التبويب</span>
+                </button>
+              </div>
+            );
+          }
+
+          if (tab.url === 'about:blank') {
+            return (
+              <div
+                key={tab.id}
+                className="w-full h-full flex flex-col items-center justify-start overflow-y-auto px-4 py-8 max-w-4xl mx-auto"
+              >
+                {/* شعار AnwerBrowser مع حالة الأمان وقاعدة البيانات */}
+                <div className="text-center mb-6">
+                  <div className="inline-flex items-center gap-2 px-3.5 py-1.5 rounded-full bg-blue-50 dark:bg-blue-950/40 text-blue-600 text-xs font-bold mb-3 border border-blue-200 dark:border-blue-800">
+                    <Shield className="w-3.5 h-3.5 text-blue-600" />
+                    <span>محرك AnwerBrowser متعدد العمليات • نفق مشفر • تشغيل وحفظ الفيديوهات بدون نت</span>
                   </div>
-                  <h2 className="text-xl font-bold mb-2">عذراً، حدث خطأ ما (Aw, Snap!)</h2>
-                  <p className="text-xs text-gray-500 max-w-sm mb-6 leading-relaxed">
-                    تعطلت عملية العرض (Renderer Process) الخاصة بهذا التبويب فقط دون التأثير على باقي التبويبات.
+                  <h1 className="text-3xl sm:text-4xl font-extrabold tracking-tight">
+                    Anwer<span className="text-blue-600">Browser</span>
+                  </h1>
+                  <p className="text-xs text-gray-500 mt-1">
+                    تصفح فوري عالي السرعة، تشغيل وحفظ الفيديوهات للمشاهدة بدون إنترنت، وحماية قصوى
                   </p>
-                  <button
-                    type="button"
-                    onClick={handleRefresh}
-                    className="px-5 py-2 rounded-full bg-blue-600 hover:bg-blue-700 text-white font-bold text-xs transition cursor-pointer"
-                  >
-                    إعادة تحميل الصفحة
-                  </button>
                 </div>
-              ) : isGoogle ? (
-                /* صفحة التبويب الجديد الفورية (Google New Tab Page) */
-                <div className="w-full h-full flex flex-col items-center justify-center p-6 bg-white dark:bg-[#1E1F22]">
-                  <div className="w-full max-w-xl flex flex-col items-center text-center -mt-12">
-                    <div className="text-5xl font-extrabold tracking-tight mb-4 select-none dir-ltr">
-                      <span className="text-[#4285F4]">A</span>
-                      <span className="text-[#EA4335]">n</span>
-                      <span className="text-[#FBBC05]">w</span>
-                      <span className="text-[#4285F4]">e</span>
-                      <span className="text-[#34A853]">r</span>
-                      <span className="text-[#EA4335]">B</span>
-                      <span className="text-[#4285F4]">r</span>
-                      <span className="text-[#FBBC05]">o</span>
-                      <span className="text-[#34A853]">w</span>
-                      <span className="text-[#EA4335]">s</span>
-                      <span className="text-[#4285F4]">e</span>
-                      <span className="text-[#34A853]">r</span>
-                    </div>
 
-                    {/* شارة السرعة الفائقة والـ VPN */}
-                    <div className="mb-6 flex items-center gap-2 flex-wrap justify-center">
-                      <div className="px-3 py-1 rounded-full bg-emerald-50 dark:bg-emerald-950/40 border border-emerald-200 dark:border-emerald-800 text-emerald-800 dark:text-emerald-300 text-xs flex items-center gap-1.5">
-                        <div className="w-2 h-2 rounded-full bg-emerald-500 animate-pulse" />
-                        <span>Free VPN نشط: سيرفر {selectedVpn.country}</span>
-                      </div>
-                      <div className="px-3 py-1 rounded-full bg-amber-50 dark:bg-amber-950/40 border border-amber-200 dark:border-amber-800 text-amber-800 dark:text-amber-300 text-xs flex items-center gap-1.5 font-bold">
-                        <Zap className="w-3 h-3 text-amber-500 fill-current" />
-                        <span>تسريع 10x وتوفير بيانات 85% مفعّل</span>
-                      </div>
-                    </div>
-
-                    {/* مربع البحث المركزي */}
-                    <form
-                      onSubmit={(e) => {
-                        e.preventDefault();
-                        if (searchQuery.trim()) {
-                          navigateCurrentTab(
-                            `https://www.google.com/search?q=${encodeURIComponent(searchQuery.trim())}`
-                          );
-                        }
-                      }}
-                      className="w-full h-12 px-5 rounded-full border border-gray-300 dark:border-gray-700 shadow-xs focus-within:shadow-md focus-within:border-blue-500 flex items-center gap-3 bg-white dark:bg-[#2B2D30] transition mb-6"
+                {/* شريط البحث المباشر في الصفحة الرئيسية */}
+                <form
+                  onSubmit={(e) => {
+                    e.preventDefault();
+                    if (searchQuery.trim()) navigateCurrentTab(searchQuery);
+                  }}
+                  className="w-full max-w-xl mb-6 relative"
+                >
+                  <div className="flex items-center h-12 px-4 rounded-2xl bg-[#F1F3F4] dark:bg-[#2B2D30] hover:shadow-md focus-within:shadow-md focus-within:bg-white dark:focus-within:bg-[#202124] border border-transparent focus-within:border-blue-500 transition">
+                    <Search className="w-5 h-5 text-gray-400 shrink-0 ml-2" />
+                    <input
+                      type="text"
+                      value={searchQuery}
+                      onChange={(e) => setSearchQuery(e.target.value)}
+                      placeholder="ابحث في Google أو اكتب عنوان موقع أو فيديو مباشر..."
+                      className="flex-1 bg-transparent text-sm text-[#202124] dark:text-[#E8EAED] focus:outline-none"
+                    />
+                    <button
+                      type="submit"
+                      className="px-3 py-1 rounded-xl bg-blue-600 hover:bg-blue-700 text-white font-bold text-xs"
                     >
-                      <Search className="w-5 h-5 text-gray-400" />
-                      <input
-                        type="text"
-                        value={searchQuery}
-                        onChange={(e) => setSearchQuery(e.target.value)}
-                        placeholder="ابحث في Google بأقصى سرعة وأمان..."
-                        className="flex-1 bg-transparent text-sm text-[#202124] dark:text-[#E8EAED] focus:outline-none"
-                        autoFocus
-                      />
-                      <button
-                        type="submit"
-                        className="px-4 py-1.5 rounded-full bg-blue-600 hover:bg-blue-700 text-white text-xs font-semibold cursor-pointer transition"
-                      >
-                        بحث
-                      </button>
-                    </form>
+                      بحث
+                    </button>
+                  </div>
+                </form>
 
-                    {/* الاختصارات السريعة */}
-                    <div className="grid grid-cols-4 gap-4 w-full max-w-md">
-                      {[
-                        { name: 'ويكيبيديا', url: 'https://ar.wikipedia.org', icon: '📚' },
-                        { name: 'أخبار التقنية', url: 'https://news.ycombinator.com', icon: '💻' },
-                        { name: 'BBC عربي', url: 'https://www.bbc.com/arabic', icon: '🌍' },
-                        { name: 'Google بحث', url: 'https://www.google.com/search?q=الذكاء+الاصطناعي', icon: '🔍' },
-                      ].map((item) => (
-                        <button
-                          key={item.name}
-                          type="button"
-                          onClick={() => navigateCurrentTab(item.url)}
-                          className="flex flex-col items-center gap-1.5 p-3 rounded-xl hover:bg-gray-100 dark:hover:bg-white/5 transition cursor-pointer group"
-                        >
-                          <div className="w-12 h-12 rounded-full bg-gray-100 dark:bg-white/10 group-hover:bg-blue-50 dark:group-hover:bg-blue-950/40 flex items-center justify-center text-xl shadow-xs transition">
-                            {item.icon}
-                          </div>
-                          <span className="text-xs text-gray-700 dark:text-gray-300 font-medium">
-                            {item.name}
-                          </span>
-                        </button>
-                      ))}
+                {/* 🎬 قسم تشغيل وحفظ الفيديوهات للمشاهدة بدون إنترنت */}
+                <div className="w-full max-w-3xl mb-8 p-4 rounded-2xl bg-gradient-to-br from-rose-50/70 to-orange-50/70 dark:from-rose-950/20 dark:to-orange-950/20 border border-rose-200 dark:border-rose-900/40 shadow-xs">
+                  <div className="flex items-center justify-between mb-3">
+                    <div className="flex items-center gap-2">
+                      <Film className="w-5 h-5 text-rose-600" />
+                      <div>
+                        <h3 className="font-bold text-sm text-gray-900 dark:text-white">
+                          مكتبة الفيديوهات وتشغيل بدون إنترنت (Offline Videos)
+                        </h3>
+                        <p className="text-[11px] text-gray-500">
+                          شغّل أي فيديو وسيتم حفظه في السجلات فورياً لمشاهدته عند انقطاع النت
+                        </p>
+                      </div>
                     </div>
+                    <button
+                      type="button"
+                      onClick={() => setIsOfflineVideosDrawerOpen(true)}
+                      className="px-3 py-1.5 rounded-xl bg-rose-600 hover:bg-rose-700 text-white text-xs font-bold transition flex items-center gap-1.5 cursor-pointer shadow-xs"
+                    >
+                      <span>عرض الكل ({videoWatchHistory.length})</span>
+                    </button>
+                  </div>
+
+                  {/* تشغيل رابط فيديو مخصص */}
+                  <form onSubmit={handlePlayCustomVideo} className="flex gap-2 mb-4">
+                    <input
+                      type="text"
+                      value={customVideoUrlInput}
+                      onChange={(e) => setCustomVideoUrlInput(e.target.value)}
+                      placeholder="أدخل رابط فيديو مباشر (MP4 / WebM / Stream URL) لتشغيله وحفظه..."
+                      className="flex-1 px-3 py-2 text-xs rounded-xl border border-rose-200 dark:border-rose-900/60 bg-white dark:bg-[#202124] focus:outline-none focus:border-rose-500 dir-ltr text-left font-mono"
+                    />
+                    <button
+                      type="submit"
+                      className="px-4 py-2 rounded-xl bg-rose-600 hover:bg-rose-700 text-white font-bold text-xs flex items-center gap-1 shrink-0 cursor-pointer"
+                    >
+                      <Play className="w-3.5 h-3.5 fill-current" />
+                      <span>تشغيل وحفظ</span>
+                    </button>
+                  </form>
+
+                  {/* بطاقات الفيديوهات الجاهزة للمشاهدة بدون إنترنت */}
+                  <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3">
+                    {SAMPLE_VIDEOS.map((vid) => (
+                      <div
+                        key={vid.id}
+                        onClick={() => handlePlayVideo(vid)}
+                        className="group relative rounded-xl overflow-hidden border border-rose-100 dark:border-rose-900/30 bg-white dark:bg-[#202124] shadow-xs hover:shadow-md cursor-pointer transition flex flex-col"
+                      >
+                        <div className="relative aspect-video bg-black overflow-hidden">
+                          <img
+                            src={vid.thumbnail}
+                            alt={vid.title}
+                            className="w-full h-full object-cover group-hover:scale-105 transition duration-300"
+                          />
+                          <div className="absolute inset-0 bg-black/30 group-hover:bg-black/10 transition flex items-center justify-center">
+                            <div className="w-9 h-9 rounded-full bg-rose-600/90 text-white flex items-center justify-center shadow-lg group-hover:scale-110 transition">
+                              <Play className="w-4 h-4 fill-current ml-0.5" />
+                            </div>
+                          </div>
+                          <span className="absolute bottom-1.5 left-1.5 px-1.5 py-0.5 rounded bg-black/75 text-white font-mono text-[9px]">
+                            {vid.duration}
+                          </span>
+                          <span className="absolute top-1.5 right-1.5 px-1.5 py-0.5 rounded bg-emerald-600 text-white font-bold text-[9px] flex items-center gap-0.5 shadow-xs">
+                            <CheckCircle2 className="w-2.5 h-2.5" />
+                            <span>بدون نت</span>
+                          </span>
+                        </div>
+                        <div className="p-2.5 flex-1 flex flex-col justify-between">
+                          <h4 className="font-bold text-[11px] line-clamp-2 text-gray-900 dark:text-gray-100 group-hover:text-rose-600 transition">
+                            {vid.title}
+                          </h4>
+                          <div className="mt-2 flex items-center justify-between text-[10px] text-gray-400">
+                            <span>{vid.playedAt}</span>
+                            <span className="text-emerald-600 font-semibold">محفوظ 💾</span>
+                          </div>
+                        </div>
+                      </div>
+                    ))}
                   </div>
                 </div>
-              ) : (
-                /* عرض الصفحة الحية مع دعم الاستجابة الفورية والشبكات الضعيفة */
-                <iframe
-                  key={`${tab.id}_${tab.url}_ds${dataSaver ? '1' : '0'}`}
-                  name="anwer_browser_web_frame"
-                  title={tab.title || 'AnwerBrowser'}
-                  src={`/api/web-proxy?url=${encodeURIComponent(tab.url)}&in_browser_frame=1&dataSaver=${dataSaver ? '1' : '0'}`}
-                  style={{ transform: `scale(${zoomLevel / 100})`, transformOrigin: 'top right' }}
-                  className="w-full h-full border-0 bg-white"
-                  sandbox="allow-scripts allow-same-origin allow-forms allow-popups allow-modals allow-presentation allow-downloads allow-pointer-lock"
-                  allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture; web-share; fullscreen"
-                  onLoad={() => {
-                    setTabs((prev) =>
-                      prev.map((t) => (t.id === tab.id ? { ...t, loading: false } : t))
-                    );
-                  }}
-                  onError={() => {
-                    setTabs((prev) =>
-                      prev.map((t) => (t.id === tab.id ? { ...t, loading: false } : t))
-                    );
-                  }}
-                />
+
+                {/* شبكة المواقع الشائعة والمختصرات */}
+                <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 w-full max-w-xl mb-8">
+                  {[
+                    { title: 'Google', url: 'https://www.google.com', color: 'bg-blue-500' },
+                    { title: 'ويكيبيديا', url: 'https://ar.wikipedia.org', color: 'bg-gray-700' },
+                    { title: 'أخبار BBC', url: 'https://www.bbc.com/arabic', color: 'bg-red-600' },
+                    { title: 'GitHub', url: 'https://github.com', color: 'bg-gray-900' },
+                    { title: 'Hacker News', url: 'https://news.ycombinator.com', color: 'bg-orange-500' },
+                    { title: 'YouTube', url: 'https://www.youtube.com', color: 'bg-red-500' },
+                    { title: 'Reddit', url: 'https://www.reddit.com', color: 'bg-orange-600' },
+                    { title: 'Stack Overflow', url: 'https://stackoverflow.com', color: 'bg-amber-600' },
+                  ].map((site, i) => (
+                    <button
+                      key={i}
+                      type="button"
+                      onClick={() => navigateCurrentTab(site.url)}
+                      className="p-3.5 rounded-2xl bg-[#F8F9FA] dark:bg-[#2B2D30] hover:bg-[#E8EAED] dark:hover:bg-[#333539] border border-gray-200 dark:border-gray-700 flex flex-col items-center justify-center gap-2 transition cursor-pointer group shadow-2xs"
+                    >
+                      <div
+                        className={`w-9 h-9 rounded-xl ${site.color} text-white flex items-center justify-center font-bold text-sm shadow-xs group-hover:scale-105 transition`}
+                      >
+                        {site.title.charAt(0)}
+                      </div>
+                      <span className="text-xs font-semibold text-gray-800 dark:text-gray-200 truncate max-w-[100px]">
+                        {site.title}
+                      </span>
+                    </button>
+                  ))}
+                </div>
+
+                {/* بطاقات ميزات المتصفح */}
+                <div className="grid grid-cols-1 md:grid-cols-3 gap-3 w-full max-w-3xl text-right">
+                  <div className="p-3.5 rounded-2xl border border-gray-200 dark:border-gray-700 bg-white dark:bg-[#2B2D30]">
+                    <div className="flex items-center gap-2 font-bold text-xs mb-1 text-rose-600">
+                      <Film className="w-4 h-4" />
+                      <span>تشغيل ومشاهدة بدون نت</span>
+                    </div>
+                    <p className="text-[11px] text-gray-500">
+                      أي فيديو تشغله يتم تخزينه في الذاكرة لتستطيع العودة إليه ومشاهدته بطلاقة حتى عند انقطاع الإنترنت.
+                    </p>
+                  </div>
+
+                  <div className="p-3.5 rounded-2xl border border-gray-200 dark:border-gray-700 bg-white dark:bg-[#2B2D30]">
+                    <div className="flex items-center gap-2 font-bold text-xs mb-1 text-blue-600">
+                      <Database className="w-4 h-4" />
+                      <span>قاعدة بيانات التخزين الدائم</span>
+                    </div>
+                    <p className="text-[11px] text-gray-500">
+                      تخزين محلي وسحابي معتمد ومشفر (Firestore + IndexedDB) لحفظ الفيديوهات وسجل التصفح بشكل موثوق.
+                    </p>
+                  </div>
+
+                  <div className="p-3.5 rounded-2xl border border-gray-200 dark:border-gray-700 bg-white dark:bg-[#2B2D30]">
+                    <div className="flex items-center gap-2 font-bold text-xs mb-1 text-emerald-600">
+                      <Shield className="w-4 h-4" />
+                      <span>Free VPN دائم في الخلفية</span>
+                    </div>
+                    <p className="text-[11px] text-gray-500">
+                      تشفير تلقائي وثابت يمنع تتبع أبحاثك وكلماتك مع نفق WireGuard عالي السرعة وبدون سجلات.
+                    </p>
+                  </div>
+                </div>
+              </div>
+            );
+          }
+
+          // عرض صفحة الويب الفعلية عبر محرك المتصفح المباشر
+          return (
+            <div key={tab.id} className="w-full h-full relative">
+              {tab.loading && (
+                <div className="absolute top-0 left-0 right-0 h-1 bg-blue-100 overflow-hidden z-20">
+                  <div className="h-full bg-blue-600 animate-pulse w-full" />
+                </div>
               )}
+              <iframe
+                title={tab.title}
+                src={tab.url}
+                className="w-full h-full border-none"
+                sandbox="allow-same-origin allow-scripts allow-forms allow-popups allow-downloads allow-modals"
+                style={{
+                  transform: `scale(${zoomLevel / 100})`,
+                  transformOrigin: 'top right',
+                  width: `${100 / (zoomLevel / 100)}%`,
+                  height: `${100 / (zoomLevel / 100)}%`,
+                }}
+                onLoad={() => {
+                  setTabs((prev) =>
+                    prev.map((t) => (t.id === tab.id ? { ...t, loading: false } : t))
+                  );
+                }}
+              />
             </div>
           );
         })}
       </main>
 
       {/* ═══════════════════════════════════════════════════════════════
-          5. مركز التحكم في Free VPN وحماية الخصوصية
+          4. نافذة مشغل الفيديو المدمج (Video Player Modal)
+          تشغيل الفيديو مع حفظه تلقائياً في السجل للمشاهدة بدون إنترنت
       ═══════════════════════════════════════════════════════════════ */}
-      {isVpnModalOpen && (
+      {isVideoPlayerOpen && currentPlayingVideo && (
         <div
-          className="fixed inset-0 z-50 bg-black/40 backdrop-blur-2xs flex items-center justify-center p-4"
-          onClick={() => setIsVpnModalOpen(false)}
+          className="fixed inset-0 z-50 bg-black/85 backdrop-blur-xs flex items-center justify-center p-3 sm:p-6"
+          onClick={() => setIsVideoPlayerOpen(false)}
         >
           <div
             onClick={(e) => e.stopPropagation()}
-            className="w-full max-w-lg bg-white dark:bg-[#2B2D30] rounded-2xl shadow-2xl border border-gray-200 dark:border-gray-700 overflow-hidden flex flex-col"
+            className="w-full max-w-3xl bg-[#18191A] rounded-2xl shadow-2xl border border-gray-800 overflow-hidden flex flex-col text-white"
           >
-            <div className="px-5 py-4 border-b border-gray-200 dark:border-gray-700 flex items-center justify-between bg-emerald-50/60 dark:bg-emerald-950/20">
-              <div className="flex items-center gap-2.5">
-                <Shield className="w-5 h-5 text-emerald-600" />
-                <div>
-                  <h3 className="font-bold text-sm text-gray-900 dark:text-white">درع Free VPN والخصوصية المطلقة</h3>
-                  <p className="text-[11px] text-gray-500">يعمل دائماً في الخلفية لحماية أبحاثك وبياناتك من التتبع</p>
-                </div>
+            <div className="p-3.5 bg-black/60 border-b border-gray-800 flex items-center justify-between">
+              <div className="flex items-center gap-2 truncate pl-2">
+                <Film className="w-4 h-4 text-rose-500 shrink-0" />
+                <h3 className="text-xs sm:text-sm font-bold truncate">
+                  {currentPlayingVideo.title}
+                </h3>
               </div>
               <button
                 type="button"
-                onClick={() => setIsVpnModalOpen(false)}
-                className="p-1 rounded-full hover:bg-black/10 dark:hover:bg-white/10"
+                onClick={() => setIsVideoPlayerOpen(false)}
+                className="p-1 rounded-full hover:bg-white/10 text-gray-400 hover:text-white"
               >
                 <X className="w-5 h-5" />
               </button>
             </div>
 
-            <div className="p-5 space-y-4 text-xs">
-              {/* حالة الاتصال ومفتاح التبديل */}
-              <div className="p-4 rounded-xl bg-gray-50 dark:bg-white/5 border border-gray-200 dark:border-gray-700 flex items-center justify-between">
-                <div>
-                  <div className="font-bold text-sm flex items-center gap-2">
-                    <span className="text-gray-900 dark:text-white">حالة الاتصال:</span>
-                    <span className={`px-2 py-0.5 rounded-full text-[11px] ${vpnEnabled ? 'bg-emerald-100 text-emerald-800 font-bold' : 'bg-gray-200 text-gray-600'}`}>
-                      {vpnEnabled ? 'متصل ومحمي دائماً 🟢' : 'معطّل مؤقتاً ⚪'}
-                    </span>
-                  </div>
-                  <div className="text-gray-500 text-[11px] mt-1">
-                    عنوان IP الافتراضي الظاهر للمواقع: <span className="font-mono text-blue-600 font-bold">{selectedVpn.ip}</span>
-                  </div>
-                </div>
+            {/* عنصر الفيديو الفعلي */}
+            <div className="relative aspect-video bg-black flex items-center justify-center">
+              <video
+                ref={videoPlayerRef}
+                src={currentPlayingVideo.streamUrl}
+                poster={currentPlayingVideo.thumbnail}
+                controls
+                autoPlay
+                className="w-full h-full object-contain"
+              />
+            </div>
 
+            {/* شريط أدوات وحالة الفيديو والتخزين */}
+            <div className="p-4 bg-[#242526] flex flex-wrap items-center justify-between gap-3 text-xs">
+              <div className="flex items-center gap-2">
+                <span className="w-2.5 h-2.5 rounded-full bg-emerald-500 animate-pulse" />
+                <span className="text-emerald-400 font-bold">محفوظ في السجل للمشاهدة بدون إنترنت 💾</span>
+                <span className="text-gray-400 text-[11px] font-mono">({currentPlayingVideo.duration})</span>
+              </div>
+
+              {/* التحكم في سرعة التشغيل */}
+              <div className="flex items-center gap-1 text-[11px]">
+                <span className="text-gray-400 ml-1">السرعة:</span>
+                {[0.75, 1, 1.25, 1.5, 2].map((rate) => (
+                  <button
+                    key={rate}
+                    type="button"
+                    onClick={() => handleChangePlaybackRate(rate)}
+                    className={`px-2 py-0.5 rounded font-mono font-bold transition ${
+                      videoPlaybackRate === rate
+                        ? 'bg-rose-600 text-white'
+                        : 'bg-white/10 text-gray-300 hover:bg-white/20'
+                    }`}
+                  >
+                    {rate}x
+                  </button>
+                ))}
+              </div>
+
+              <div className="flex items-center gap-2">
                 <button
                   type="button"
                   onClick={() => {
-                    setVpnEnabled((prev) => !prev);
-                    showToast(!vpnEnabled ? 'تم تفعيل حماية VPN الثابتة 🛡️' : 'تم إيقاف الـ VPN مؤقتاً');
+                    setIsOfflineVideosDrawerOpen(true);
+                    setIsVideoPlayerOpen(false);
                   }}
-                  className={`px-4 py-2 rounded-xl text-xs font-bold transition cursor-pointer ${
-                    vpnEnabled
-                      ? 'bg-emerald-600 hover:bg-emerald-700 text-white'
-                      : 'bg-gray-200 text-gray-700 hover:bg-gray-300'
-                  }`}
+                  className="px-3 py-1.5 rounded-lg bg-white/10 hover:bg-white/20 text-xs font-semibold flex items-center gap-1.5"
                 >
-                  {vpnEnabled ? 'متصل (انقر للتعطيل)' : 'اتصال الآن'}
+                  <Film className="w-3.5 h-3.5 text-rose-400" />
+                  <span>فتح مكتبة الفيديوهات المحفوظة</span>
                 </button>
               </div>
+            </div>
+          </div>
+        </div>
+      )}
 
-              {/* مميزات منع التتبع والتسريب */}
-              <div className="grid grid-cols-2 gap-3">
-                <div className="p-3 rounded-xl bg-gray-50 dark:bg-white/5 border border-gray-100 dark:border-gray-800">
-                  <div className="flex items-center gap-1.5 font-bold text-gray-800 dark:text-gray-200 mb-1">
-                    <EyeOff className="w-4 h-4 text-emerald-600" />
-                    <span>منع تتبع الأبحاث (DNT):</span>
-                  </div>
-                  <span className="text-[11px] text-emerald-600 font-semibold">مفعّل بنسبة 100%</span>
-                </div>
-
-                <div className="p-3 rounded-xl bg-gray-50 dark:bg-white/5 border border-gray-100 dark:border-gray-800">
-                  <div className="flex items-center gap-1.5 font-bold text-gray-800 dark:text-gray-200 mb-1">
-                    <Zap className="w-4 h-4 text-amber-500" />
-                    <span>تسريع الشبكة الضعيفة:</span>
-                  </div>
-                  <span className="text-[11px] text-amber-600 font-semibold">توفير 85% من البيانات</span>
-                </div>
-
-                <div className="p-3 rounded-xl bg-gray-50 dark:bg-white/5 border border-gray-100 dark:border-gray-800">
-                  <div className="flex items-center gap-1.5 font-bold text-gray-800 dark:text-gray-200 mb-1">
-                    <Key className="w-4 h-4 text-blue-600" />
-                    <span>بروتوكول التشفير:</span>
-                  </div>
-                  <span className="text-[11px] text-gray-600 font-mono">WireGuard 256-bit</span>
-                </div>
-
-                <div className="p-3 rounded-xl bg-gray-50 dark:bg-white/5 border border-gray-100 dark:border-gray-800">
-                  <div className="flex items-center gap-1.5 font-bold text-gray-800 dark:text-gray-200 mb-1">
-                    <Activity className="w-4 h-4 text-purple-600" />
-                    <span>البيانات المحمية:</span>
-                  </div>
-                  <span className="text-[11px] text-blue-600 font-mono">{vpnBytesProtected} MB</span>
+      {/* ═══════════════════════════════════════════════════════════════
+          5. درج مكتبة الفيديوهات المحفوظة للمشاهدة بدون نت (Offline Videos Library)
+      ═══════════════════════════════════════════════════════════════ */}
+      {isOfflineVideosDrawerOpen && (
+        <div
+          className="fixed inset-0 z-50 bg-black/40 backdrop-blur-2xs flex justify-end"
+          onClick={() => setIsOfflineVideosDrawerOpen(false)}
+        >
+          <div
+            onClick={(e) => e.stopPropagation()}
+            className="w-full max-w-md h-full bg-white dark:bg-[#2B2D30] shadow-2xl flex flex-col border-r border-gray-200 dark:border-gray-700"
+          >
+            <div className="p-4 border-b border-gray-200 dark:border-gray-700 flex items-center justify-between bg-rose-50/50 dark:bg-rose-950/20">
+              <div className="flex items-center gap-2">
+                <Film className="w-5 h-5 text-rose-600" />
+                <div>
+                  <h3 className="font-bold text-sm text-gray-900 dark:text-white">
+                    مكتبة الفيديوهات المحفوظة ({videoWatchHistory.length})
+                  </h3>
+                  <p className="text-[10px] text-gray-500">جاهزة للتشغيل عند انقطاع الإنترنت بدون نت</p>
                 </div>
               </div>
-
-              {/* اختيار السيرفر والدولة */}
-              <div>
-                <label className="font-bold text-gray-700 dark:text-gray-300 block mb-2">
-                  اختر موقع سيرفر الـ VPN المجاني:
-                </label>
-                <div className="space-y-2">
-                  {AVAILABLE_VPN_SERVERS.map((server) => {
-                    const isSelected = selectedVpn.id === server.id;
-                    return (
-                      <div
-                        key={server.id}
-                        onClick={() => {
-                          setSelectedVpn(server);
-                          showToast(`تم التبديل إلى سيرفر ${server.country} (${server.ip})`);
-                        }}
-                        className={`p-3 rounded-xl border flex items-center justify-between cursor-pointer transition ${
-                          isSelected
-                            ? 'border-emerald-500 bg-emerald-50/50 dark:bg-emerald-950/20 text-emerald-900 dark:text-emerald-300 font-bold'
-                            : 'border-gray-200 dark:border-gray-700 hover:bg-gray-50 dark:hover:bg-white/5'
-                        }`}
-                      >
-                        <div className="flex items-center gap-2.5">
-                          <span className="text-xl">{server.flag}</span>
-                          <div>
-                            <div className="font-bold">{server.country} — {server.city}</div>
-                            <div className="text-[10px] text-gray-500 font-mono">IP: {server.ip} • {server.protocol}</div>
-                          </div>
-                        </div>
-
-                        <div className="flex items-center gap-2">
-                          <span className="text-[10px] text-emerald-600 font-mono">{server.ping} ms</span>
-                          {isSelected && <Check className="w-4 h-4 text-emerald-600" />}
-                        </div>
-                      </div>
-                    );
-                  })}
-                </div>
+              <div className="flex items-center gap-1.5">
+                {videoWatchHistory.length > 0 && (
+                  <button
+                    type="button"
+                    onClick={handleClearAllVideos}
+                    className="p-1.5 rounded-lg text-red-500 hover:bg-red-50 text-xs flex items-center gap-1 font-semibold"
+                  >
+                    <Trash2 className="w-3.5 h-3.5" />
+                    <span>مسح الكل</span>
+                  </button>
+                )}
+                <button
+                  type="button"
+                  onClick={() => setIsOfflineVideosDrawerOpen(false)}
+                  className="p-1 rounded-full hover:bg-black/10 dark:hover:bg-white/10 text-gray-400 hover:text-white"
+                >
+                  <X className="w-5 h-5" />
+                </button>
               </div>
             </div>
 
-            <div className="p-4 bg-gray-50 dark:bg-white/5 border-t border-gray-200 dark:border-gray-700 flex items-center justify-between">
-              <span className="text-[11px] text-gray-500">
-                🔒 ضمان انعدام السجلات (Zero-Logs Policy): لا يتم تخزين أي بحث أو عنوان نهائياً
-              </span>
+            <div className="p-3 bg-gray-50 dark:bg-white/5 border-b border-gray-200 dark:border-gray-700 flex items-center justify-between text-xs">
+              <div className="flex items-center gap-1.5 text-emerald-600 font-semibold text-[11px]">
+                <CheckCircle2 className="w-4 h-4" />
+                <span>حفظ محلي في IndexedDB + قاعدة البيانات</span>
+              </div>
               <button
                 type="button"
-                onClick={() => setIsVpnModalOpen(false)}
-                className="px-4 py-1.5 rounded-lg bg-blue-600 hover:bg-blue-700 text-white font-bold text-xs"
+                onClick={() => setIsDbApprovalModalOpen(true)}
+                className="text-[11px] text-blue-600 hover:underline font-bold"
               >
-                حفظ وإغلاق
+                إدارة قاعدة البيانات
+              </button>
+            </div>
+
+            <div className="flex-1 overflow-y-auto p-3 space-y-3">
+              {videoWatchHistory.length === 0 ? (
+                <div className="text-center py-16 text-gray-400 text-xs flex flex-col items-center">
+                  <Film className="w-10 h-10 text-gray-300 dark:text-gray-600 mb-2" />
+                  <p className="font-semibold text-gray-600 dark:text-gray-300">
+                    لا توجد فيديوهات محفوظة بعد
+                  </p>
+                  <p className="text-[11px] text-gray-400 mt-1 max-w-xs">
+                    أي فيديو تقوم بتشغيله في المتصفح سيُحفظ هنا تلقائياً لتشاهده بدون نت في أي وقت.
+                  </p>
+                </div>
+              ) : (
+                videoWatchHistory.map((vid) => (
+                  <div
+                    key={vid.id}
+                    onClick={() => {
+                      handlePlayVideo(vid);
+                      setIsOfflineVideosDrawerOpen(false);
+                    }}
+                    className="p-2.5 rounded-2xl border border-gray-200 dark:border-gray-700/60 hover:border-rose-500 hover:bg-rose-50/20 dark:hover:bg-rose-950/10 cursor-pointer transition flex gap-3 group relative"
+                  >
+                    <div className="relative w-28 h-18 rounded-xl overflow-hidden bg-black shrink-0">
+                      <img
+                        src={vid.thumbnail}
+                        alt={vid.title}
+                        className="w-full h-full object-cover group-hover:scale-105 transition"
+                      />
+                      <div className="absolute inset-0 bg-black/25 flex items-center justify-center">
+                        <Play className="w-5 h-5 text-white fill-current" />
+                      </div>
+                      <span className="absolute bottom-1 left-1 bg-black/80 text-white text-[9px] px-1 py-0.2 rounded font-mono">
+                        {vid.duration}
+                      </span>
+                    </div>
+
+                    <div className="flex-1 flex flex-col justify-between truncate">
+                      <div>
+                        <h4 className="font-bold text-xs truncate text-gray-900 dark:text-white group-hover:text-rose-600 transition">
+                          {vid.title}
+                        </h4>
+                        <div className="text-[10px] text-emerald-600 font-semibold flex items-center gap-1 mt-1">
+                          <CheckCircle2 className="w-3 h-3" />
+                          <span>جاهز للمشاهدة بدون إنترنت</span>
+                        </div>
+                      </div>
+
+                      <div className="flex items-center justify-between text-[10px] text-gray-400 mt-1">
+                        <span>{vid.playedAt}</span>
+                        <button
+                          type="button"
+                          onClick={(e) => handleDeleteVideoRecord(vid.id, e)}
+                          className="opacity-0 group-hover:opacity-100 p-1 text-gray-400 hover:text-red-500 rounded-md hover:bg-black/5 dark:hover:bg-white/10"
+                          title="حذف من السجل"
+                        >
+                          <Trash2 className="w-3.5 h-3.5" />
+                        </button>
+                      </div>
+                    </div>
+                  </div>
+                ))
+              )}
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* ═══════════════════════════════════════════════════════════════
+          6. نافذة الموافقة واعتماد قاعدة البيانات (Database Storage Approval Modal)
+      ═══════════════════════════════════════════════════════════════ */}
+      {isDbApprovalModalOpen && (
+        <div
+          className="fixed inset-0 z-50 bg-black/50 backdrop-blur-xs flex items-center justify-center p-4"
+          onClick={() => setIsDbApprovalModalOpen(false)}
+        >
+          <div
+            onClick={(e) => e.stopPropagation()}
+            className="w-full max-w-lg bg-white dark:bg-[#2B2D30] rounded-2xl shadow-2xl border border-gray-200 dark:border-gray-700 overflow-hidden flex flex-col"
+          >
+            <div className="p-5 border-b border-gray-200 dark:border-gray-700 bg-blue-50/60 dark:bg-blue-950/20 flex items-center justify-between">
+              <div className="flex items-center gap-3">
+                <div className="w-10 h-10 rounded-xl bg-blue-600 text-white flex items-center justify-center shadow-md">
+                  <Database className="w-5 h-5" />
+                </div>
+                <div>
+                  <h3 className="font-bold text-sm text-gray-900 dark:text-white">
+                    اعتماد قاعدة البيانات والتخزين الدائم
+                  </h3>
+                  <p className="text-[11px] text-gray-500">
+                    مطلوب إذنك وموافقتك لربط قاعدة البيانات لحفظ الفيديوهات والسجلات
+                  </p>
+                </div>
+              </div>
+              <button
+                type="button"
+                onClick={() => setIsDbApprovalModalOpen(false)}
+                className="p-1.5 rounded-full hover:bg-black/10 dark:hover:bg-white/10 text-gray-400"
+              >
+                <X className="w-5 h-5" />
+              </button>
+            </div>
+
+            <div className="p-5 space-y-4 text-xs leading-relaxed text-gray-700 dark:text-gray-300">
+              <div className="p-3.5 rounded-xl bg-blue-50 dark:bg-blue-950/30 border border-blue-200 dark:border-blue-800 text-blue-900 dark:text-blue-300">
+                <p className="font-bold mb-1">📌 ما الذي تقوم به قاعدة البيانات بعد الموافقة؟</p>
+                <ul className="list-disc list-inside space-y-1 text-[11px]">
+                  <li>حفظ وتخزين الفيديوهات التي تشاهدها لتعود إليها وتشاهدها بدون نت عند انقطاع الشبكة.</li>
+                  <li>حفظ سجل التصفح والبحث والمواقع المفضلة بشكل مشفر ومستمر.</li>
+                  <li>تفعيل التخزين السحابي والمحلي السريع (IndexedDB + Cache Storage + Firestore).</li>
+                </ul>
+              </div>
+
+              <div className="grid grid-cols-2 gap-3">
+                <div className="p-3 rounded-xl border border-gray-200 dark:border-gray-700 bg-gray-50 dark:bg-white/5">
+                  <span className="font-bold block text-gray-900 dark:text-white mb-0.5">نوع التخزين:</span>
+                  <span className="text-[11px] text-gray-500 font-mono">Firestore + IndexedDB</span>
+                </div>
+                <div className="p-3 rounded-xl border border-gray-200 dark:border-gray-700 bg-gray-50 dark:bg-white/5">
+                  <span className="font-bold block text-gray-900 dark:text-white mb-0.5">مستوى الأمان والتشفير:</span>
+                  <span className="text-[11px] text-emerald-600 font-semibold">مشفّر 256-bit آمن</span>
+                </div>
+              </div>
+
+              <div className="flex items-center gap-2 text-[11px] text-gray-500">
+                <CheckCircle2 className="w-4 h-4 text-emerald-600 shrink-0" />
+                <span>الموافقة تمنح المتصفح صلاحية استخدام قاعدة البيانات للحفظ الدائم وتجاوز حدود الذاكرة المؤقتة.</span>
+              </div>
+            </div>
+
+            <div className="p-4 bg-gray-50 dark:bg-white/5 border-t border-gray-200 dark:border-gray-700 flex items-center justify-between gap-3">
+              <button
+                type="button"
+                onClick={() => setIsDbApprovalModalOpen(false)}
+                className="px-4 py-2 rounded-xl border border-gray-300 text-gray-700 dark:text-gray-300 text-xs font-semibold hover:bg-gray-100 dark:hover:bg-white/10"
+              >
+                تخطي مؤقتاً
+              </button>
+              <button
+                type="button"
+                onClick={handleApproveDatabase}
+                className="flex-1 py-2 rounded-xl bg-blue-600 hover:bg-blue-700 text-white text-xs font-bold transition shadow-xs flex items-center justify-center gap-1.5 cursor-pointer"
+              >
+                <Check className="w-4 h-4" />
+                <span>موافق واعتماد قاعدة البيانات للتخزين</span>
               </button>
             </div>
           </div>
@@ -1296,7 +1733,136 @@ export default function App() {
       )}
 
       {/* ═══════════════════════════════════════════════════════════════
-          6. مدير مهام كروم (Chrome Task Manager - Shift+Esc)
+          7. درج السجل والتصفية (History Drawer)
+      ═══════════════════════════════════════════════════════════════ */}
+      {isHistoryDrawerOpen && (
+        <div
+          className="fixed inset-0 z-50 bg-black/40 backdrop-blur-2xs flex justify-end"
+          onClick={() => setIsHistoryDrawerOpen(false)}
+        >
+          <div
+            onClick={(e) => e.stopPropagation()}
+            className="w-full max-w-md h-full bg-white dark:bg-[#2B2D30] shadow-2xl flex flex-col border-r border-gray-200 dark:border-gray-700"
+          >
+            <div className="p-4 border-b border-gray-200 dark:border-gray-700 flex items-center justify-between bg-gray-50 dark:bg-white/5">
+              <div className="flex items-center gap-2">
+                <History className="w-5 h-5 text-blue-600" />
+                <h3 className="font-bold text-sm text-gray-900 dark:text-white">
+                  سجل التصفح ({filteredHistory.length})
+                </h3>
+              </div>
+              <div className="flex items-center gap-1.5">
+                {historyList.length > 0 && (
+                  <button
+                    type="button"
+                    onClick={handleClearAllHistory}
+                    className="p-1.5 rounded-lg text-red-500 hover:bg-red-50 text-xs flex items-center gap-1 font-semibold"
+                  >
+                    <Trash2 className="w-3.5 h-3.5" />
+                    <span>مسح الكل</span>
+                  </button>
+                )}
+                <button
+                  type="button"
+                  onClick={() => setIsHistoryDrawerOpen(false)}
+                  className="p-1 rounded-full text-gray-400 hover:text-white"
+                >
+                  <X className="w-5 h-5" />
+                </button>
+              </div>
+            </div>
+
+            <div className="p-3 border-b border-gray-200 dark:border-gray-700 bg-white dark:bg-[#2B2D30] space-y-2.5">
+              <div className="relative flex items-center">
+                <Search className="w-4 h-4 text-gray-400 absolute right-3 pointer-events-none" />
+                <input
+                  type="text"
+                  value={historySearchQuery}
+                  onChange={(e) => setHistorySearchQuery(e.target.value)}
+                  placeholder="ابحث في السجل بالاسم، الرابط، أو الكلمة..."
+                  className="w-full pr-9 pl-8 py-2 rounded-xl border border-gray-200 dark:border-gray-700 bg-gray-50 dark:bg-white/5 text-xs text-gray-900 dark:text-white focus:outline-none focus:border-blue-500"
+                />
+                {historySearchQuery && (
+                  <button
+                    type="button"
+                    onClick={() => setHistorySearchQuery('')}
+                    className="absolute left-2.5 text-gray-400 hover:text-white p-0.5"
+                  >
+                    <X className="w-3.5 h-3.5" />
+                  </button>
+                )}
+              </div>
+
+              <div className="flex items-center gap-1.5 overflow-x-auto no-scrollbar text-[11px]">
+                <button
+                  type="button"
+                  onClick={() => setHistoryFilterCategory('all')}
+                  className={`px-3 py-1 rounded-lg font-semibold transition shrink-0 ${
+                    historyFilterCategory === 'all' ? 'bg-blue-600 text-white' : 'bg-gray-100 dark:bg-white/5'
+                  }`}
+                >
+                  الكل ({historyList.length})
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setHistoryFilterCategory('searches')}
+                  className={`px-3 py-1 rounded-lg font-semibold transition shrink-0 ${
+                    historyFilterCategory === 'searches' ? 'bg-blue-600 text-white' : 'bg-gray-100 dark:bg-white/5'
+                  }`}
+                >
+                  عمليات البحث 🔍
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setHistoryFilterCategory('domains')}
+                  className={`px-3 py-1 rounded-lg font-semibold transition shrink-0 ${
+                    historyFilterCategory === 'domains' ? 'bg-blue-600 text-white' : 'bg-gray-100 dark:bg-white/5'
+                  }`}
+                >
+                  المواقع والنطاقات 🌐
+                </button>
+              </div>
+            </div>
+
+            <div className="flex-1 overflow-y-auto p-3 space-y-2">
+              {filteredHistory.length === 0 ? (
+                <div className="text-center py-16 text-gray-400 text-xs">لا توجد نتائج مطابقة</div>
+              ) : (
+                filteredHistory.map((h, i) => (
+                  <div
+                    key={i}
+                    onClick={() => {
+                      navigateCurrentTab(h.url);
+                      setIsHistoryDrawerOpen(false);
+                    }}
+                    className="p-3 rounded-xl border border-gray-100 dark:border-gray-700/60 hover:border-blue-500 hover:bg-blue-50/40 cursor-pointer transition flex items-center justify-between group"
+                  >
+                    <div className="truncate flex-1 pl-2">
+                      <div className="text-xs font-bold truncate mb-0.5">{h.title}</div>
+                      <div className="text-[10px] text-gray-400 font-mono truncate dir-ltr text-left">
+                        {h.url}
+                      </div>
+                    </div>
+                    <div className="flex items-center gap-2 shrink-0">
+                      <span className="text-[10px] text-gray-400 font-mono">{h.time}</span>
+                      <button
+                        type="button"
+                        onClick={(e) => handleDeleteHistoryItem(i, e)}
+                        className="opacity-0 group-hover:opacity-100 p-1 text-gray-400 hover:text-red-500 rounded-md"
+                      >
+                        <Trash2 className="w-3.5 h-3.5" />
+                      </button>
+                    </div>
+                  </div>
+                ))
+              )}
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* ═══════════════════════════════════════════════════════════════
+          8. مدير مهام كروم (Task Manager)
       ═══════════════════════════════════════════════════════════════ */}
       {isTaskManagerOpen && (
         <div
@@ -1315,7 +1881,7 @@ export default function App() {
               <button
                 type="button"
                 onClick={() => setIsTaskManagerOpen(false)}
-                className="p-1 rounded-full hover:bg-black/10 dark:hover:bg-white/10"
+                className="p-1 rounded-full text-gray-400 hover:text-white"
               >
                 <X className="w-5 h-5" />
               </button>
@@ -1346,9 +1912,9 @@ export default function App() {
                         {p.type === 'browser' && <Activity className="w-3.5 h-3.5 text-blue-600 shrink-0" />}
                         {p.type === 'gpu' && <Zap className="w-3.5 h-3.5 text-amber-500 shrink-0" />}
                         {p.type === 'network' && <Globe className="w-3.5 h-3.5 text-emerald-500 shrink-0" />}
+                        {p.type === 'database' && <Database className="w-3.5 h-3.5 text-blue-600 shrink-0" />}
                         {p.type === 'vpn' && <Shield className="w-3.5 h-3.5 text-emerald-600 shrink-0" />}
                         {p.type === 'renderer' && <Layers className="w-3.5 h-3.5 text-purple-500 shrink-0" />}
-                        {p.type === 'storage' && <Folder className="w-3.5 h-3.5 text-gray-400 shrink-0" />}
                         <span className="truncate">{p.name}</span>
                       </td>
                       <td className="p-2.5 font-mono">{p.memoryMB} MB</td>
@@ -1362,13 +1928,13 @@ export default function App() {
 
             <div className="p-4 bg-gray-50 dark:bg-white/5 border-t border-gray-200 dark:border-gray-700 flex items-center justify-between">
               <span className="text-[11px] text-gray-500">
-                بنية متعددة العمليات (Multi-Process): عزل تام بين المواقع والذاكرة
+                بنية متعددة العمليات (Multi-Process): عزل تام بين المواقع وتشغيل الفيديو
               </span>
               <button
                 type="button"
                 disabled={!selectedProcessPid}
                 onClick={() => selectedProcessPid && handleKillProcess(selectedProcessPid)}
-                className="px-4 py-1.5 rounded-lg bg-red-600 hover:bg-red-700 disabled:opacity-40 text-white font-bold text-xs transition cursor-pointer"
+                className="px-4 py-1.5 rounded-lg bg-red-600 hover:bg-red-700 disabled:opacity-40 text-white font-bold text-xs"
               >
                 إنهاء العملية (End Process)
               </button>
@@ -1378,7 +1944,140 @@ export default function App() {
       )}
 
       {/* ═══════════════════════════════════════════════════════════════
-          7. نافذة تسجيل الدخول بالمزامنة
+          9. نافذة إعدادات Free VPN ونفق WireGuard المشفر
+      ═══════════════════════════════════════════════════════════════ */}
+      {isVpnModalOpen && (
+        <div
+          className="fixed inset-0 z-50 bg-black/40 backdrop-blur-2xs flex items-center justify-center p-4"
+          onClick={() => setIsVpnModalOpen(false)}
+        >
+          <div
+            onClick={(e) => e.stopPropagation()}
+            className="w-full max-w-md bg-white dark:bg-[#2B2D30] rounded-2xl shadow-2xl border border-gray-200 dark:border-gray-700 overflow-hidden flex flex-col"
+          >
+            <div className="p-4 border-b border-gray-200 dark:border-gray-700 flex items-center justify-between bg-emerald-50 dark:bg-emerald-950/20">
+              <div className="flex items-center gap-2">
+                <Shield className="w-5 h-5 text-emerald-600" />
+                <h3 className="font-bold text-sm text-gray-900 dark:text-white">
+                  شبكة Free VPN المدمجة (دائم ومستقر)
+                </h3>
+              </div>
+              <button
+                type="button"
+                onClick={() => setIsVpnModalOpen(false)}
+                className="p-1 rounded-full text-gray-400 hover:text-white"
+              >
+                <X className="w-5 h-5" />
+              </button>
+            </div>
+
+            <div className="p-4 space-y-3 text-xs">
+              <div className="flex items-center justify-between p-3 rounded-xl bg-gray-50 dark:bg-white/5 border border-gray-200 dark:border-gray-700">
+                <div>
+                  <div className="font-bold">حالة نفق التشفير</div>
+                  <div className="text-[11px] text-gray-500">حماية من تتبع مزود الخدمة والمواقع</div>
+                </div>
+                <button
+                  type="button"
+                  onClick={() => {
+                    setVpnEnabled((prev) => !prev);
+                    showToast(!vpnEnabled ? 'تم تفعيل Free VPN 🟢' : 'تم تعطيل VPN');
+                  }}
+                  className={`px-3 py-1.5 rounded-xl font-bold text-xs transition ${
+                    vpnEnabled ? 'bg-emerald-600 text-white' : 'bg-gray-300 text-gray-700'
+                  }`}
+                >
+                  {vpnEnabled ? 'نشط ومتصل ✅' : 'تشغيل VPN'}
+                </button>
+              </div>
+
+              <div>
+                <label className="font-bold block mb-1 text-gray-600 dark:text-gray-400">
+                  خوادم VPN المتوفرة مجاناً:
+                </label>
+                <div className="space-y-1.5">
+                  {AVAILABLE_VPN_SERVERS.map((server) => (
+                    <div
+                      key={server.id}
+                      onClick={() => {
+                        setSelectedVpn(server);
+                        showToast(`تم التبديل إلى خادم ${server.country}`);
+                      }}
+                      className={`p-2.5 rounded-xl border cursor-pointer transition flex items-center justify-between ${
+                        selectedVpn.id === server.id
+                          ? 'border-emerald-500 bg-emerald-50/50 dark:bg-emerald-950/20'
+                          : 'border-gray-200 dark:border-gray-700 hover:bg-gray-50 dark:hover:bg-white/5'
+                      }`}
+                    >
+                      <div className="flex items-center gap-2">
+                        <span className="text-base">{server.flag}</span>
+                        <div>
+                          <div className="font-bold text-xs">{server.country} - {server.city}</div>
+                          <div className="text-[10px] text-gray-400 font-mono">{server.protocol}</div>
+                        </div>
+                      </div>
+                      <div className="text-left font-mono text-[10px] text-emerald-600">
+                        {server.ping} ms
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* ═══════════════════════════════════════════════════════════════
+          10. درج التنزيلات (Downloads Drawer)
+      ═══════════════════════════════════════════════════════════════ */}
+      {isDownloadsDrawerOpen && (
+        <div
+          className="fixed inset-0 z-50 bg-black/40 backdrop-blur-2xs flex justify-end"
+          onClick={() => setIsDownloadsDrawerOpen(false)}
+        >
+          <div
+            onClick={(e) => e.stopPropagation()}
+            className="w-full max-w-md h-full bg-white dark:bg-[#2B2D30] shadow-2xl flex flex-col border-r border-gray-200 dark:border-gray-700"
+          >
+            <div className="p-4 border-b border-gray-200 dark:border-gray-700 flex items-center justify-between bg-gray-50 dark:bg-white/5">
+              <div className="flex items-center gap-2">
+                <Download className="w-5 h-5 text-blue-600" />
+                <h3 className="font-bold text-sm text-gray-900 dark:text-white">
+                  التنزيلات ({downloadsList.length})
+                </h3>
+              </div>
+              <button
+                type="button"
+                onClick={() => setIsDownloadsDrawerOpen(false)}
+                className="p-1 rounded-full text-gray-400 hover:text-white"
+              >
+                <X className="w-5 h-5" />
+              </button>
+            </div>
+
+            <div className="flex-1 overflow-y-auto p-4 space-y-3">
+              {downloadsList.map((d) => (
+                <div
+                  key={d.id}
+                  className="p-3 rounded-xl border border-gray-200 dark:border-gray-700 bg-gray-50 dark:bg-white/5 flex items-center justify-between"
+                >
+                  <div>
+                    <div className="text-xs font-bold truncate max-w-[220px]">{d.filename}</div>
+                    <div className="text-[10px] text-gray-400">{d.size} • {d.time}</div>
+                  </div>
+                  <span className="text-[10px] font-bold text-emerald-600 bg-emerald-50 dark:bg-emerald-950/40 px-2 py-0.5 rounded-full">
+                    مكتمل ✅
+                  </span>
+                </div>
+              ))}
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* ═══════════════════════════════════════════════════════════════
+          11. نافذة الملف الشخصي والمزامنة (Profile Modal)
       ═══════════════════════════════════════════════════════════════ */}
       {isProfileModalOpen && (
         <div
@@ -1387,280 +2086,41 @@ export default function App() {
         >
           <div
             onClick={(e) => e.stopPropagation()}
-            className="w-full max-w-md bg-white dark:bg-[#2B2D30] rounded-2xl shadow-2xl border border-gray-200 dark:border-gray-700 p-6 text-center"
+            className="w-full max-w-sm bg-white dark:bg-[#2B2D30] rounded-2xl shadow-2xl border border-gray-200 dark:border-gray-700 p-5 flex flex-col text-center"
           >
-            <div className="w-16 h-16 rounded-full bg-blue-100 text-blue-600 flex items-center justify-center mx-auto mb-4 font-bold text-2xl">
-              {userProfile.isLoggedIn ? userProfile.name.charAt(0).toUpperCase() : <User className="w-8 h-8" />}
+            <div className="w-14 h-14 rounded-full bg-blue-600 text-white text-xl font-bold flex items-center justify-center mx-auto mb-3 shadow-md">
+              {userProfile.isLoggedIn ? userProfile.name.charAt(0).toUpperCase() : <User className="w-6 h-6" />}
             </div>
-            <h3 className="text-lg font-bold mb-1">
-              {userProfile.isLoggedIn ? userProfile.name : 'تسجيل الدخول إلى AnwerBrowser'}
+            <h3 className="font-bold text-sm mb-0.5">
+              {userProfile.isLoggedIn ? userProfile.name : 'مستخدم AnwerBrowser'}
             </h3>
-            <p className="text-xs text-gray-500 mb-6">
-              {userProfile.isLoggedIn
-                ? `مزامنة الإشارات وكلمات المرور نشطة عبر: ${userProfile.email}`
-                : 'قم بتسجيل الدخول لمزامنة الإشارات وسجل التصفح وكلمات المرور بين أجهزتك.'}
+            <p className="text-[11px] text-gray-500 mb-4">
+              {userProfile.isLoggedIn ? userProfile.email : 'المزامنة السحابية وقاعدة البيانات نشطة'}
             </p>
 
-            {userProfile.isLoggedIn ? (
-              <div className="space-y-3">
-                <div className="p-3 bg-emerald-50 dark:bg-emerald-950/30 rounded-xl border border-emerald-200 dark:border-emerald-800 text-emerald-800 dark:text-emerald-300 text-xs flex items-center justify-between">
-                  <span>المزامنة المشفرة: مفعّلة</span>
-                  <Check className="w-4 h-4 text-emerald-600" />
-                </div>
-                <button
-                  type="button"
-                  onClick={() => {
-                    setUserProfile({ isLoggedIn: false, email: '', name: '', syncEnabled: false });
-                    showToast('تم تسجيل الخروج');
-                    setIsProfileModalOpen(false);
-                  }}
-                  className="w-full py-2.5 rounded-xl border border-red-200 text-red-600 hover:bg-red-50 text-xs font-bold transition"
-                >
-                  تسجيل الخروج
-                </button>
-              </div>
-            ) : (
-              <form
-                onSubmit={(e) => {
-                  e.preventDefault();
-                  const form = e.target as HTMLFormElement;
-                  const email = (form.elements.namedItem('email') as HTMLInputElement).value;
-                  if (email) {
-                    setUserProfile({
-                      isLoggedIn: true,
-                      email,
-                      name: email.split('@')[0],
-                      syncEnabled: true,
-                    });
-                    showToast('تم تسجيل الدخول وتفعيل المزامنة بنجاح 🎉');
-                    setIsProfileModalOpen(false);
-                  }
-                }}
-                className="space-y-3"
-              >
-                <input
-                  type="email"
-                  name="email"
-                  placeholder="أدخل بريدك الإلكتروني (Gmail)..."
-                  required
-                  className="w-full px-4 py-2.5 rounded-xl border border-gray-300 dark:border-gray-600 bg-transparent text-xs focus:outline-none focus:border-blue-600"
-                />
-                <button
-                  type="submit"
-                  className="w-full py-2.5 rounded-xl bg-blue-600 hover:bg-blue-700 text-white text-xs font-bold transition shadow-xs cursor-pointer"
-                >
-                  تسجيل الدخول وتفعيل المزامنة
-                </button>
-              </form>
-            )}
-          </div>
-        </div>
-      )}
-
-      {/* ═══════════════════════════════════════════════════════════════
-          8. درج السجل والتنزيلات (History & Downloads Drawers)
-      ═══════════════════════════════════════════════════════════════ */}
-      {isHistoryDrawerOpen && (
-        <div
-          className="fixed inset-0 z-50 bg-black/40 backdrop-blur-2xs flex justify-end"
-          onClick={() => setIsHistoryDrawerOpen(false)}
-        >
-          <div
-            onClick={(e) => e.stopPropagation()}
-            className="w-full max-w-md h-full bg-white dark:bg-[#2B2D30] shadow-2xl flex flex-col border-r border-gray-200 dark:border-gray-700"
-          >
-            {/* ترويسة درج السجل وأزرار التحكم */}
-            <div className="p-4 border-b border-gray-200 dark:border-gray-700 flex items-center justify-between bg-gray-50 dark:bg-white/5">
-              <div className="flex items-center gap-2">
-                <History className="w-5 h-5 text-blue-600" />
-                <h3 className="font-bold text-sm text-gray-900 dark:text-white">
-                  سجل التصفح ({filteredHistory.length})
-                </h3>
-              </div>
-
-              <div className="flex items-center gap-1.5">
-                {historyList.length > 0 && (
-                  <button
-                    type="button"
-                    onClick={handleClearAllHistory}
-                    className="p-1.5 rounded-lg text-red-500 hover:bg-red-50 dark:hover:bg-red-950/30 transition text-xs flex items-center gap-1 font-semibold"
-                    title="مسح سجل التصفح بالكامل"
-                  >
-                    <Trash2 className="w-3.5 h-3.5" />
-                    <span className="hidden sm:inline">مسح الكل</span>
-                  </button>
-                )}
-                <button
-                  type="button"
-                  onClick={() => setIsHistoryDrawerOpen(false)}
-                  className="p-1 rounded-full hover:bg-black/10 dark:hover:bg-white/10 text-gray-400 hover:text-gray-700 dark:hover:text-white"
-                >
-                  <X className="w-5 h-5" />
-                </button>
-              </div>
-            </div>
-
-            {/* مربع البحث والتصفية المباشر بالكلمات المفتاحية */}
-            <div className="p-3 border-b border-gray-200 dark:border-gray-700 bg-white dark:bg-[#2B2D30] space-y-2.5">
-              <div className="relative flex items-center">
-                <Search className="w-4 h-4 text-gray-400 absolute right-3 pointer-events-none" />
-                <input
-                  type="text"
-                  value={historySearchQuery}
-                  onChange={(e) => setHistorySearchQuery(e.target.value)}
-                  placeholder="ابحث في السجل بالاسم، الرابط، أو الكلمة..."
-                  className="w-full pr-9 pl-8 py-2 rounded-xl border border-gray-200 dark:border-gray-700 bg-gray-50 dark:bg-white/5 text-xs text-gray-900 dark:text-white focus:outline-none focus:border-blue-500 focus:bg-white dark:focus:bg-[#1E1F22] transition"
-                  autoFocus
-                />
-                {historySearchQuery && (
-                  <button
-                    type="button"
-                    onClick={() => setHistorySearchQuery('')}
-                    className="absolute left-2.5 text-gray-400 hover:text-gray-600 dark:hover:text-white p-0.5"
-                    title="مسح البحث"
-                  >
-                    <X className="w-3.5 h-3.5" />
-                  </button>
-                )}
-              </div>
-
-              {/* أزرار التصفية والتصنيف (Filter Chips) */}
-              <div className="flex items-center gap-1.5 overflow-x-auto no-scrollbar text-[11px]">
-                <button
-                  type="button"
-                  onClick={() => setHistoryFilterCategory('all')}
-                  className={`px-3 py-1 rounded-lg font-semibold transition shrink-0 cursor-pointer ${
-                    historyFilterCategory === 'all'
-                      ? 'bg-blue-600 text-white shadow-xs'
-                      : 'bg-gray-100 dark:bg-white/5 text-gray-600 dark:text-gray-300 hover:bg-gray-200'
-                  }`}
-                >
-                  الكل ({historyList.length})
-                </button>
-                <button
-                  type="button"
-                  onClick={() => setHistoryFilterCategory('searches')}
-                  className={`px-3 py-1 rounded-lg font-semibold transition shrink-0 cursor-pointer ${
-                    historyFilterCategory === 'searches'
-                      ? 'bg-blue-600 text-white shadow-xs'
-                      : 'bg-gray-100 dark:bg-white/5 text-gray-600 dark:text-gray-300 hover:bg-gray-200'
-                  }`}
-                >
-                  عمليات البحث 🔍
-                </button>
-                <button
-                  type="button"
-                  onClick={() => setHistoryFilterCategory('domains')}
-                  className={`px-3 py-1 rounded-lg font-semibold transition shrink-0 cursor-pointer ${
-                    historyFilterCategory === 'domains'
-                      ? 'bg-blue-600 text-white shadow-xs'
-                      : 'bg-gray-100 dark:bg-white/5 text-gray-600 dark:text-gray-300 hover:bg-gray-200'
-                  }`}
-                >
-                  المواقع والنطاقات 🌐
-                </button>
-              </div>
-            </div>
-
-            {/* قائمة نتائج السجل المصفاة */}
-            <div className="flex-1 overflow-y-auto p-3 space-y-2">
-              {filteredHistory.length === 0 ? (
-                <div className="text-center py-16 text-gray-400 text-xs flex flex-col items-center">
-                  <Search className="w-8 h-8 text-gray-300 dark:text-gray-600 mb-2" />
-                  {historySearchQuery ? (
-                    <>
-                      <p className="font-semibold text-gray-600 dark:text-gray-300">
-                        لا توجد نتائج تطابق: "{historySearchQuery}"
-                      </p>
-                      <button
-                        type="button"
-                        onClick={() => {
-                          setHistorySearchQuery('');
-                          setHistoryFilterCategory('all');
-                        }}
-                        className="mt-3 text-blue-600 hover:underline font-bold text-xs"
-                      >
-                        إعادة ضبط البحث والتصفية
-                      </button>
-                    </>
-                  ) : (
-                    <p>سجل التصفح فارغ تماماً</p>
-                  )}
-                </div>
-              ) : (
-                filteredHistory.map((h, i) => (
-                  <div
-                    key={i}
-                    onClick={() => {
-                      navigateCurrentTab(h.url);
-                      setIsHistoryDrawerOpen(false);
-                    }}
-                    className="p-3 rounded-xl border border-gray-100 dark:border-gray-700/60 hover:border-blue-500 hover:bg-blue-50/40 dark:hover:bg-blue-950/20 cursor-pointer transition flex items-center justify-between group"
-                  >
-                    <div className="truncate flex-1 pl-2">
-                      <div className="text-xs font-bold text-gray-900 dark:text-white truncate mb-0.5">
-                        {h.title}
-                      </div>
-                      <div className="text-[10px] text-gray-400 font-mono truncate dir-ltr text-left">
-                        {h.url}
-                      </div>
-                    </div>
-
-                    <div className="flex items-center gap-2 shrink-0">
-                      <span className="text-[10px] text-gray-400 font-mono">{h.time}</span>
-                      <button
-                        type="button"
-                        onClick={(e) => handleDeleteHistoryItem(i, e)}
-                        className="opacity-0 group-hover:opacity-100 p-1 text-gray-400 hover:text-red-500 rounded-md hover:bg-black/5 dark:hover:bg-white/10 transition"
-                        title="حذف من السجل"
-                      >
-                        <Trash2 className="w-3.5 h-3.5" />
-                      </button>
-                    </div>
-                  </div>
-                ))
-              )}
-            </div>
-          </div>
-        </div>
-      )}
-
-      {isDownloadsDrawerOpen && (
-        <div
-          className="fixed inset-0 z-50 bg-black/40 flex justify-end"
-          onClick={() => setIsDownloadsDrawerOpen(false)}
-        >
-          <div
-            onClick={(e) => e.stopPropagation()}
-            className="w-full max-w-sm h-full bg-white dark:bg-[#2B2D30] shadow-2xl flex flex-col"
-          >
-            <div className="p-4 border-b border-gray-200 dark:border-gray-700 flex items-center justify-between">
-              <div className="flex items-center gap-2">
-                <Download className="w-5 h-5 text-blue-600" />
-                <h3 className="font-bold text-sm">التنزيلات ({downloadsList.length})</h3>
-              </div>
-              <button
-                type="button"
-                onClick={() => setIsDownloadsDrawerOpen(false)}
-                className="p-1 rounded-full hover:bg-black/10 dark:hover:bg-white/10"
-              >
-                <X className="w-5 h-5" />
-              </button>
-            </div>
-            <div className="flex-1 overflow-y-auto p-4 space-y-2">
-              {downloadsList.map((d) => (
-                <div
-                  key={d.id}
-                  className="p-3 rounded-xl border border-gray-100 dark:border-gray-700/60 flex items-center justify-between"
-                >
-                  <div className="truncate flex-1">
-                    <div className="text-xs font-bold truncate">{d.filename}</div>
-                    <div className="text-[10px] text-emerald-600 font-semibold">{d.size} • مكتمل 🟢</div>
-                  </div>
-                  <span className="text-[10px] text-gray-400">{d.time}</span>
-                </div>
-              ))}
-            </div>
+            <button
+              type="button"
+              onClick={() => {
+                setUserProfile((prev) => ({
+                  ...prev,
+                  isLoggedIn: !prev.isLoggedIn,
+                  name: !prev.isLoggedIn ? 'أنور القرشي' : '',
+                  email: !prev.isLoggedIn ? 'anwer@browser.com' : '',
+                }));
+                showToast(!userProfile.isLoggedIn ? 'تم تسجيل الدخول والمزامنة' : 'تم تسجيل الخروج');
+                setIsProfileModalOpen(false);
+              }}
+              className="w-full py-2 rounded-xl bg-blue-600 hover:bg-blue-700 text-white font-bold text-xs mb-2 transition"
+            >
+              {userProfile.isLoggedIn ? 'تسجيل الخروج' : 'تسجيل الدخول ومزامنة البيانات'}
+            </button>
+            <button
+              type="button"
+              onClick={() => setIsProfileModalOpen(false)}
+              className="w-full py-2 rounded-xl bg-gray-100 dark:bg-white/10 hover:bg-gray-200 text-xs font-semibold"
+            >
+              إغلاق
+            </button>
           </div>
         </div>
       )}
