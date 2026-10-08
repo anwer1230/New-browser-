@@ -64,6 +64,8 @@ import {
 } from 'lucide-react';
 
 import { SUPPORTED_LANGUAGES, translateTextOnline } from './services/translator.ts';
+import { ChromeNewTabPage } from './components/ChromeNewTabPage.tsx';
+import { ChromeSERP } from './components/ChromeSERP.tsx';
 
 // ══════════════════════════════════════════════════════════════════════
 // 1. نماذج بيانات المحرك البرمجي والعمليات المتعددة (Engine Data Models)
@@ -844,17 +846,17 @@ export default function App() {
     {
       id: 'tab_1',
       pid: 101,
-      title: 'songs - بحث Google',
-      url: 'https://www.google.com/search?q=songs',
-      history: ['https://www.google.com/search?q=songs'],
+      title: 'علامة تبويب جديدة',
+      url: 'chrome://newtab',
+      history: ['chrome://newtab'],
       historyIndex: 0,
       loading: false,
       isCrashed: false,
     },
   ]);
   const [activeTabId, setActiveTabId] = useState<string>('tab_1');
-  const [urlInput, setUrlInput] = useState<string>('google.com/search?q=songs');
-  const [searchQuery, setSearchQuery] = useState<string>('songs');
+  const [urlInput, setUrlInput] = useState<string>('');
+  const [searchQuery, setSearchQuery] = useState<string>('');
   const [zoomLevel, setZoomLevel] = useState<number>(100);
 
   // ═══ الآلية البرمجية 6: التحميل التدريجي (Lazy Loading Engine) ═══
@@ -933,7 +935,7 @@ export default function App() {
     { id: 'b_4', title: 'ويكيبيديا', url: 'https://ar.wikipedia.org' },
   ]);
   const [historyList, setHistoryList] = useState<Array<{ title: string; url: string; time: string }>>([
-    { title: 'songs - بحث Google', url: 'https://www.google.com/search?q=songs', time: '12:30 م' },
+    { title: 'علامة تبويب جديدة', url: 'chrome://newtab', time: '12:30 م' },
   ]);
   const [historySearchQuery, setHistorySearchQuery] = useState<string>('');
   const [historyFilterCategory, setHistoryFilterCategory] = useState<'all' | 'searches' | 'domains'>('all');
@@ -955,14 +957,14 @@ export default function App() {
 
   // استخراج وتحليل الاستعلام النشط
   const currentQueryParsed = useMemo(() => {
-    let q = searchQuery || 'songs';
+    let q = searchQuery || '';
     if (activeTab.url.includes('google.com/search')) {
       try {
         const u = new URL(activeTab.url);
         q = u.searchParams.get('q') || q;
       } catch {}
     }
-    return parseAndAnalyzeQuery(q);
+    return parseAndAnalyzeQuery(q || '');
   }, [searchQuery, activeTab.url]);
 
   // نتائج البحث العمودي المتخصصة (Vertical Results)
@@ -1002,7 +1004,11 @@ export default function App() {
 
   // مزامنة شريط العنوان
   useEffect(() => {
-    setUrlInput(activeTab.url.replace(/^https?:\/\//, ''));
+    if (activeTab.url === 'chrome://newtab' || activeTab.url === 'about:blank') {
+      setUrlInput('');
+    } else {
+      setUrlInput(activeTab.url.replace(/^https?:\/\//, ''));
+    }
   }, [activeTab.url, activeTabId]);
 
   // حفظ الإعدادات محلياً
@@ -1097,25 +1103,38 @@ export default function App() {
 
   // الملاحة والتنقل
   const navigateCurrentTab = (input: string) => {
-    const parsed = parseAndAnalyzeQuery(input);
-    if (!parsed.clean) return;
+    const clean = input.trim();
+    if (!clean) return;
 
     let targetUrl: string;
     let newTitle: string;
 
-    if (parsed.isUrl && parsed.targetUrl) {
-      targetUrl = parsed.targetUrl;
-      newTitle = targetUrl.replace(/^https?:\/\//, '').split('/')[0];
+    if (
+      clean === 'chrome://newtab' ||
+      clean === 'about:blank' ||
+      clean === 'https://www.google.com' ||
+      clean === 'https://www.google.com/' ||
+      clean === 'google.com'
+    ) {
+      targetUrl = 'chrome://newtab';
+      newTitle = 'علامة تبويب جديدة';
+      setUrlInput('');
+      setSearchQuery('');
     } else {
-      targetUrl = `https://www.google.com/search?q=${encodeURIComponent(parsed.clean)}`;
-      newTitle = `${parsed.clean} - بحث Google`;
-      setSearchQuery(parsed.clean);
-      setVideosVisibleCount(3);
-      setAppsVisibleCount(3);
-      setWebVisibleCount(3);
+      const parsed = parseAndAnalyzeQuery(clean);
+      if (parsed.isUrl && parsed.targetUrl) {
+        targetUrl = parsed.targetUrl;
+        newTitle = targetUrl.replace(/^https?:\/\//, '').split('/')[0];
+      } else {
+        targetUrl = `https://www.google.com/search?q=${encodeURIComponent(parsed.clean)}`;
+        newTitle = `${parsed.clean} - بحث Google`;
+        setSearchQuery(parsed.clean);
+        setVideosVisibleCount(3);
+        setAppsVisibleCount(3);
+        setWebVisibleCount(3);
+      }
+      setUrlInput(targetUrl.replace(/^https?:\/\//, ''));
     }
-
-    setUrlInput(targetUrl.replace(/^https?:\/\//, ''));
 
     setHistoryList((prev) => [
       {
@@ -1136,27 +1155,29 @@ export default function App() {
           title: newTitle,
           history: nextHist,
           historyIndex: nextHist.length - 1,
-          loading: true,
+          loading: targetUrl !== 'chrome://newtab',
           isCrashed: false,
         };
       })
     );
 
-    setTimeout(() => {
-      setTabs((prev) =>
-        prev.map((t) => (t.id === activeTabId ? { ...t, loading: false } : t))
-      );
-    }, dataSaver ? 60 : 250);
+    if (targetUrl !== 'chrome://newtab') {
+      setTimeout(() => {
+        setTabs((prev) =>
+          prev.map((t) => (t.id === activeTabId ? { ...t, loading: false } : t))
+        );
+      }, dataSaver ? 60 : 250);
+    }
   };
 
   // التحكم بالتبويبات
-  const createNewTab = (initialUrl: string = 'about:blank') => {
+  const createNewTab = (initialUrl: string = 'chrome://newtab') => {
     const newId = `tab_${Date.now()}`;
     const newPid = Math.floor(100 + Math.random() * 900);
     const newTab: TabItem = {
       id: newId,
       pid: newPid,
-      title: initialUrl === 'about:blank' ? 'علامة تبويب جديدة' : initialUrl,
+      title: initialUrl === 'chrome://newtab' || initialUrl === 'about:blank' ? 'علامة تبويب جديدة' : initialUrl,
       url: initialUrl,
       history: [initialUrl],
       historyIndex: 0,
@@ -1271,7 +1292,14 @@ export default function App() {
     }
   };
 
-  const isSearchPage = activeTab.url.includes('google.com/search');
+  const isNewTabPage =
+    activeTab.url === 'chrome://newtab' ||
+    activeTab.url === 'about:blank' ||
+    activeTab.url === 'https://www.google.com' ||
+    activeTab.url === 'https://www.google.com/' ||
+    activeTab.url === 'http://www.google.com';
+
+  const isSearchPage = !isNewTabPage && activeTab.url.includes('google.com/search');
 
   return (
     <div
@@ -1317,7 +1345,7 @@ export default function App() {
 
         <button
           type="button"
-          onClick={() => createNewTab('https://www.google.com/search?q=songs')}
+          onClick={() => createNewTab('chrome://newtab')}
           className="w-7 h-7 rounded-full flex items-center justify-center hover:bg-[#C7C9CC] dark:hover:bg-[#333539] text-[#5F6368] dark:text-[#9AA0A6] transition cursor-pointer shrink-0"
           title="علامة تبويب جديدة (Ctrl+T)"
         >
@@ -1394,7 +1422,7 @@ export default function App() {
           </button>
           <button
             type="button"
-            onClick={() => navigateCurrentTab('https://www.google.com/search?q=songs')}
+            onClick={() => navigateCurrentTab('chrome://newtab')}
             className="p-1.5 rounded-full hover:bg-black/5 dark:hover:bg-white/10 transition cursor-pointer"
             title="الصفحة الرئيسية (Home)"
           >
@@ -1501,7 +1529,7 @@ export default function App() {
               </button>
               <button
                 type="button"
-                onClick={() => createNewTab('https://www.google.com/search?q=songs')}
+                onClick={() => createNewTab('chrome://newtab')}
                 className="w-full px-4 py-2 hover:bg-gray-100 dark:hover:bg-white/5 flex items-center justify-between text-right"
               >
                 <span>علامة تبويب جديدة</span>
@@ -1631,547 +1659,28 @@ export default function App() {
           3. مساحة العرض الرئيسية: محرك بحث جوجل المتكامل أو صفحة الويب
       ═══════════════════════════════════════════════════════════════ */}
       <main className="flex-1 overflow-y-auto bg-white dark:bg-[#202124] relative">
-        {isSearchPage ? (
-          <div className="w-full max-w-4xl mx-auto px-4 py-4 space-y-4">
-            {/* رأس محرك بحث جوجل (Google Header) */}
-            <div className="flex items-center justify-between pb-3 border-b border-gray-100 dark:border-gray-800">
-              <div
-                onClick={() => navigateCurrentTab('https://www.google.com/search?q=songs')}
-                className="cursor-pointer select-none font-bold text-2xl tracking-tight flex items-center"
-              >
-                <span className="text-[#4285F4]">G</span>
-                <span className="text-[#EA4335]">o</span>
-                <span className="text-[#FBBC05]">o</span>
-                <span className="text-[#4285F4]">g</span>
-                <span className="text-[#34A853]">l</span>
-                <span className="text-[#EA4335]">e</span>
-              </div>
-
-              {/* شريط الإشعارات والحساب والنية المصنفة */}
-              <div className="flex items-center gap-3">
-                <div className="hidden sm:flex items-center gap-1.5 px-3 py-1 rounded-full bg-purple-50 dark:bg-purple-950/40 text-purple-700 dark:text-purple-300 text-[11px] font-bold border border-purple-200 dark:border-purple-800">
-                  <SlidersHorizontal className="w-3.5 h-3.5" />
-                  <span>النية المصنفة: {currentQueryParsed.intents.slice(0, 2).join(' + ')}</span>
-                </div>
-
-                <button
-                  type="button"
-                  onClick={() => showToast('لا توجد إشعارات جديدة')}
-                  className="p-1.5 rounded-full hover:bg-gray-100 dark:hover:bg-white/10 text-gray-600 dark:text-gray-300 relative cursor-pointer"
-                >
-                  <Bell className="w-4 h-4" />
-                </button>
-
-                <button
-                  type="button"
-                  onClick={() => setIsProfileModalOpen(true)}
-                  className="w-8 h-8 rounded-full bg-blue-600 text-white flex items-center justify-center font-bold text-xs ring-2 ring-blue-300 dark:ring-blue-800 cursor-pointer"
-                >
-                  <span>A</span>
-                </button>
-              </div>
-            </div>
-
-            {/* مربع البحث التفاعلي (Search Box with Voice & Clear) */}
-            <form
-              onSubmit={(e) => {
-                e.preventDefault();
-                navigateCurrentTab(searchQuery);
-              }}
-              className="flex items-center h-12 px-4 rounded-full bg-white dark:bg-[#303134] border border-gray-200 dark:border-transparent shadow-xs hover:shadow-md focus-within:shadow-md transition gap-2"
-            >
-              <Search className="w-4 h-4 text-gray-400 shrink-0" />
-
-              <input
-                type="text"
-                value={searchQuery}
-                onChange={(e) => setSearchQuery(e.target.value)}
-                placeholder="ابحث في Google..."
-                className="flex-1 bg-transparent text-sm text-[#202124] dark:text-white focus:outline-none"
-              />
-
-              {searchQuery && (
-                <button
-                  type="button"
-                  onClick={() => setSearchQuery('')}
-                  className="p-1 text-gray-400 hover:text-gray-600"
-                >
-                  <X className="w-4 h-4" />
-                </button>
-              )}
-
-              {/* ميكروفون البحث الصوتي (Voice Search) */}
-              <button
-                type="button"
-                onClick={() => {
-                  setIsVoiceListening(true);
-                  showToast('🎤 جاري الاستماع لصوتك...');
-                  setTimeout(() => {
-                    setIsVoiceListening(false);
-                    navigateCurrentTab('songs');
-                  }, 2000);
-                }}
-                className={`p-1.5 rounded-full transition cursor-pointer ${
-                  isVoiceListening ? 'text-red-500 animate-pulse bg-red-50' : 'text-[#4285F4] hover:bg-blue-50'
-                }`}
-                title="البحث الصوتي"
-              >
-                <Mic className="w-4 h-4" />
-              </button>
-
-              <button
-                type="button"
-                onClick={() => showToast('📷 عدسة Google Lens')}
-                className="p-1 text-[#EA4335] hover:bg-gray-100 rounded-full"
-                title="عدسة Google Lens"
-              >
-                <Camera className="w-4 h-4" />
-              </button>
-            </form>
-
-            {/* شريط التصنيفات وأوضاع البحث (Search Modes Carousel) */}
-            <div className="border-b border-gray-200 dark:border-gray-800 flex items-center gap-1 overflow-x-auto no-scrollbar text-xs">
-              {[
-                { id: 'all', label: t('الكل'), icon: <Search className="w-3.5 h-3.5" /> },
-                { id: 'ai', label: t('وضع AI'), icon: <Sparkles className="w-3.5 h-3.5 text-purple-600" />, badge: t('توليدي') },
-                { id: 'videos', label: t('فيديوهات'), icon: <Film className="w-3.5 h-3.5 text-rose-500" /> },
-                { id: 'images', label: t('صور'), icon: <Image className="w-3.5 h-3.5 text-blue-500" /> },
-                { id: 'shorts', label: t('فيديوهات قصيرة'), icon: <Play className="w-3.5 h-3.5 text-red-500" /> },
-                { id: 'news', label: t('أخبار'), icon: <Globe className="w-3.5 h-3.5 text-emerald-500" /> },
-                { id: 'apps', label: t('تطبيقات'), icon: <Smartphone className="w-3.5 h-3.5 text-indigo-500" /> },
-                { id: 'books', label: t('كتب وأبحاث'), icon: <BookOpen className="w-3.5 h-3.5 text-amber-500" /> },
-                { id: 'pdf', label: t('ملفات PDF'), icon: <FileText className="w-3.5 h-3.5 text-gray-500" /> },
-              ].map((m) => (
-                <button
-                  key={m.id}
-                  type="button"
-                  onClick={() => setSelectedVertical(m.id as any)}
-                  className={`py-2 px-3 border-b-2 font-semibold transition shrink-0 flex items-center gap-1.5 cursor-pointer ${
-                    selectedVertical === m.id
-                      ? 'border-blue-600 text-blue-600 font-bold'
-                      : 'border-transparent text-gray-600 dark:text-gray-400 hover:text-black dark:hover:text-white'
-                  }`}
-                >
-                  {m.icon}
-                  <span>{m.label}</span>
-                  {m.badge && (
-                    <span className="px-1 py-0.2 rounded-full bg-purple-100 text-purple-700 text-[9px] font-bold">
-                      {m.badge}
-                    </span>
-                  )}
-                </button>
-              ))}
-            </div>
-
-            {/* ═══════════════════════════════════════════════════════════════
-                شريط نظام الترتيب اللغوي المترجم (عربي أولاً ➔ إنجليزي ثانياً ➔ لغات أخرى)
-            ═══════════════════════════════════════════════════════════════ */}
-            <div className="p-3.5 bg-gradient-to-r from-emerald-50 via-blue-50 to-purple-50 dark:from-emerald-950/40 dark:via-blue-950/40 dark:to-purple-950/40 border border-emerald-200 dark:border-emerald-800/60 rounded-2xl flex flex-wrap items-center justify-between gap-3 text-xs shadow-xs">
-              <div className="flex items-center gap-2.5">
-                <span className="text-xl shrink-0">🎯</span>
-                <div>
-                  <div className="flex items-center gap-1.5 flex-wrap">
-                    <span className="font-bold text-gray-900 dark:text-white">
-                      نظام الترتيب والترجمة ذو الأولوية:
-                    </span>
-                    <span className="px-2 py-0.5 rounded-full bg-emerald-600 text-white font-bold text-[10px] flex items-center gap-1 shadow-2xs">
-                      <span>1. مترجم للعربية أولاً</span>
-                      <span>🇸🇦</span>
-                    </span>
-                    <span className="text-gray-400 font-bold">➔</span>
-                    <span className="px-2 py-0.5 rounded-full bg-blue-600 text-white font-bold text-[10px] flex items-center gap-1 shadow-2xs">
-                      <span>2. ثم بالإنجليزية</span>
-                      <span>🇺🇸</span>
-                    </span>
-                    <span className="text-gray-400 font-bold">➔</span>
-                    <span className="px-2 py-0.5 rounded-full bg-purple-600 text-white font-bold text-[10px] flex items-center gap-1 shadow-2xs">
-                      <span>3. ثم لغات أخرى</span>
-                      <span>🌐</span>
-                    </span>
-                  </div>
-                  <p className="text-[11px] text-gray-600 dark:text-gray-300 mt-1">
-                    يتم جلب وعرض نتائج الأفلام والأغاني والمحتوى <b>المترجمة للعربية أولاً</b>، وإذا لم تتوفر يعرض <b>الترجمة الإنجليزية</b>، ثم <b>اللغات الأخرى</b> بالترتيب التتابعي.
-                  </p>
-                </div>
-              </div>
-
-              <div className="flex items-center gap-1 bg-white/80 dark:bg-black/40 p-1 rounded-xl border border-gray-200/70 dark:border-gray-700/70 shadow-2xs">
-                {[
-                  { id: 'all', label: 'الكل بالترتيب الذكي (عربي ➔ إنجليزي ➔ أخرى)' },
-                  { id: 'ar', label: 'مترجم للعربية فقط 🇸🇦' },
-                  { id: 'en', label: 'بالإنجليزية فقط 🇺🇸' },
-                  { id: 'orig', label: 'لغات أخرى 🌐' },
-                ].map((flt) => (
-                  <button
-                    key={flt.id}
-                    type="button"
-                    onClick={() => setSelectedLangFilter(flt.id as any)}
-                    className={`px-2.5 py-1 rounded-lg text-[11px] font-bold transition cursor-pointer ${
-                      selectedLangFilter === flt.id
-                        ? 'bg-emerald-600 text-white shadow-xs'
-                        : 'text-gray-600 dark:text-gray-300 hover:bg-black/5 dark:hover:bg-white/10'
-                    }`}
-                  >
-                    {flt.label}
-                  </button>
-                ))}
-              </div>
-            </div>
-
-            {/* ═══════════════════════════════════════════════════════════════
-                الآلية البرمجية 4 و 5: الترتيب والعرض الديناميكي المتكيف مع النية
-            ═══════════════════════════════════════════════════════════════ */}
-
-            {/* أ) بطاقة النظرة العامة بالذكاء الاصطناعي (AI Overview) */}
-            {(selectedVertical === 'all' || selectedVertical === 'ai') && (
-              <div className="p-4 rounded-2xl bg-gradient-to-br from-purple-50/80 to-blue-50/80 dark:from-purple-950/20 dark:to-blue-950/20 border border-purple-200 dark:border-purple-800 shadow-xs">
-                <div className="flex items-center justify-between mb-2">
-                  <div className="flex items-center gap-2">
-                    <div className="w-6 h-6 rounded-lg bg-gradient-to-tr from-purple-600 to-blue-500 flex items-center justify-center text-white">
-                      <Sparkles className="w-3.5 h-3.5" />
-                    </div>
-                    <span className="font-bold text-xs text-purple-900 dark:text-purple-300">
-                      {t('نظرة عامة مدعومة بنماذج الذكاء الاصطناعي (AI Overview)')}
-                    </span>
-                  </div>
-                  <button
-                    type="button"
-                    onClick={() => setIsAiOverviewExpanded((p) => !p)}
-                    className="text-[11px] text-purple-700 dark:text-purple-400 font-bold cursor-pointer"
-                  >
-                    {isAiOverviewExpanded ? t('تصغير') : t('عرض المزيد')}
-                  </button>
-                </div>
-
-                {isAiOverviewExpanded && (
-                  <div className="text-xs text-gray-700 dark:text-gray-300 space-y-2 leading-relaxed">
-                    <p>{t(verticalData.aiOverview.summary)}</p>
-                    <ul className="list-disc list-inside space-y-1 text-[11px] text-gray-600 dark:text-gray-400">
-                      {verticalData.aiOverview.keyPoints.map((pt, i) => (
-                        <li key={i}>{t(pt)}</li>
-                      ))}
-                    </ul>
-                  </div>
-                )}
-              </div>
-            )}
-
-            {/* ب) قسم الفيديوهات (Videos Vertical) - يظهر عندما تكون النية فيديو/وسائط */}
-            {(selectedVertical === 'all' || selectedVertical === 'videos' || selectedVertical === 'shorts') &&
-              (currentQueryParsed.intents.includes('video_streaming') ||
-                currentQueryParsed.intents.includes('media_music') ||
-                selectedVertical === 'videos') && (
-                <div className="space-y-3 pt-2">
-                  <div className="flex items-center justify-between">
-                    <div className="flex items-center gap-2">
-                      <Film className="w-4 h-4 text-rose-600" />
-                      <h3 className="font-bold text-sm text-gray-900 dark:text-white">{t('فيديوهات')}</h3>
-                    </div>
-                    <span className="text-[10px] text-emerald-600 font-bold flex items-center gap-1">
-                      <CheckCircle2 className="w-3 h-3" />
-                      {t('مشغل مدمج + حفظ تلقائي بدون نت')}
-                    </span>
-                  </div>
-
-                  <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3">
-                    {filteredVideos.slice(0, videosVisibleCount).map((vid) => (
-                      <div
-                        key={vid.id}
-                        onClick={() => handlePlayVideo(vid)}
-                        className="p-3 rounded-2xl border border-gray-200 dark:border-gray-700 hover:border-blue-500 hover:shadow-md transition cursor-pointer flex flex-col justify-between bg-white dark:bg-[#2B2D30] group"
-                      >
-                        <div className="relative aspect-video rounded-xl overflow-hidden bg-black mb-2.5">
-                          <img
-                            src={vid.thumbnail}
-                            alt={vid.title}
-                            className="w-full h-full object-cover group-hover:scale-105 transition"
-                          />
-                          <div className="absolute inset-0 bg-black/20 flex items-center justify-center">
-                            <div className="w-9 h-9 rounded-full bg-white/90 text-rose-600 flex items-center justify-center shadow-lg group-hover:scale-110 transition">
-                              <Play className="w-4 h-4 fill-current ml-0.5" />
-                            </div>
-                          </div>
-                          <span className="absolute bottom-1.5 left-1.5 px-1.5 py-0.5 rounded bg-black/80 text-white font-mono text-[9px]">
-                            {vid.duration}
-                          </span>
-
-                          {/* شارة أولوية اللغة */}
-                          {vid.langBadge && (
-                            <span
-                              className={`absolute top-1.5 right-1.5 px-2 py-0.5 rounded-full font-bold text-[9px] shadow-sm flex items-center gap-1 ${
-                                vid.langTier === 'ar'
-                                  ? 'bg-emerald-600 text-white'
-                                  : vid.langTier === 'en'
-                                  ? 'bg-blue-600 text-white'
-                                  : 'bg-purple-600 text-white'
-                              }`}
-                            >
-                              {vid.langTier === 'ar' && (
-                                <span className="w-1.5 h-1.5 rounded-full bg-white animate-pulse" />
-                              )}
-                              {vid.langBadge}
-                            </span>
-                          )}
-                        </div>
-
-                        <div>
-                          <h4 className="font-bold text-xs text-gray-900 dark:text-white line-clamp-2 group-hover:text-blue-600 transition">
-                            {t(vid.title)}
-                          </h4>
-                          <p className="text-[11px] text-gray-500 mt-1">{t(vid.channel)}</p>
-                        </div>
-
-                        <div className="flex items-center justify-between text-[10px] text-gray-400 mt-2 pt-2 border-t border-gray-100 dark:border-gray-800">
-                          <span>{t(vid.views)}</span>
-                          <span className="text-emerald-600 font-bold">{t('جاهز للمشاهدة 🎬')}</span>
-                        </div>
-                      </div>
-                    ))}
-                  </div>
-
-                  {/* التحميل التدريجي للفيديوهات */}
-                  {videosVisibleCount < filteredVideos.length && (
-                    <button
-                      type="button"
-                      onClick={() => {
-                        setVideosVisibleCount((c) => Math.min(filteredVideos.length, c + 3));
-                        showToast('تم تحميل المزيد من الفيديوهات');
-                      }}
-                      className="w-full py-2.5 rounded-xl border border-gray-200 dark:border-gray-700 bg-gray-50 dark:bg-white/5 hover:bg-gray-100 text-xs font-bold text-blue-600 transition cursor-pointer"
-                    >
-                      {t('المزيد من الفيديوهات ⬇️')}
-                    </button>
-                  )}
-                </div>
-              )}
-
-            {/* ج) قسم التطبيقات (Apps Vertical) - يظهر عندما تكون النية أدوات/تطبيقات/موسيقى */}
-            {(selectedVertical === 'all' || selectedVertical === 'apps') &&
-              (currentQueryParsed.intents.includes('apps_tools') || selectedVertical === 'apps') && (
-                <div className="space-y-3 p-4 rounded-2xl bg-gray-50 dark:bg-white/5 border border-gray-200 dark:border-gray-700">
-                  <div className="flex items-center justify-between">
-                    <div className="flex items-center gap-2">
-                      <Smartphone className="w-4 h-4 text-indigo-600" />
-                      <h3 className="font-bold text-sm text-gray-900 dark:text-white">
-                        {t('تطبيقات ذات صلة (Google Play Store)')}
-                      </h3>
-                    </div>
-                    <span className="text-[11px] text-gray-400">{t('تحميل مباشر وتثبيت')}</span>
-                  </div>
-
-                  <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3">
-                    {verticalData.apps.slice(0, appsVisibleCount).map((app) => (
-                      <div
-                        key={app.id}
-                        className="p-3 rounded-xl border border-gray-200 dark:border-gray-700 bg-white dark:bg-[#202124] flex items-center justify-between gap-3 shadow-2xs"
-                      >
-                        <div className="flex items-center gap-3 truncate">
-                          <img
-                            src={app.icon}
-                            alt={app.name}
-                            className="w-11 h-11 rounded-xl object-cover shrink-0"
-                          />
-                          <div className="truncate">
-                            <div className="flex items-center gap-1.5">
-                              <h4 className="font-bold text-xs truncate text-gray-900 dark:text-white">
-                                {t(app.name)}
-                              </h4>
-                              {app.langBadge && (
-                                <span className="px-1.5 py-0.2 rounded text-[9px] font-bold bg-emerald-100 text-emerald-800 dark:bg-emerald-950 dark:text-emerald-300">
-                                  {app.langBadge}
-                                </span>
-                              )}
-                            </div>
-                            <p className="text-[10px] text-gray-400">{t(app.category)}</p>
-                            <div className="flex items-center gap-1 text-[10px] text-amber-500 font-bold mt-0.5">
-                              <span>⭐ {app.rating}</span>
-                              <span className="text-gray-400 font-normal">({app.reviewsCount})</span>
-                            </div>
-                          </div>
-                        </div>
-
-                        <button
-                          type="button"
-                          onClick={() => showToast(`تم تثبيت ${app.name} عبر AnwerBrowser بنجاح`)}
-                          className="px-3 py-1.5 rounded-full bg-blue-600 hover:bg-blue-700 text-white font-bold text-xs shrink-0 cursor-pointer"
-                        >
-                          {t('تثبيت')}
-                        </button>
-                      </div>
-                    ))}
-                  </div>
-
-                  {appsVisibleCount < verticalData.apps.length && (
-                    <button
-                      type="button"
-                      onClick={() => {
-                        setAppsVisibleCount((c) => Math.min(verticalData.apps.length, c + 2));
-                        showToast('تم تحميل المزيد من التطبيقات');
-                      }}
-                      className="w-full py-2 text-center text-xs font-bold text-blue-600 hover:underline cursor-pointer"
-                    >
-                      {t('المزيد من التطبيقات ⬇️')}
-                    </button>
-                  )}
-                </div>
-              )}
-
-            {/* د) قسم الكتب والأبحاث وملفات PDF */}
-            {(selectedVertical === 'all' || selectedVertical === 'books' || selectedVertical === 'pdf') &&
-              (currentQueryParsed.intents.includes('research_books_pdf') ||
-                selectedVertical === 'books' ||
-                selectedVertical === 'pdf') && (
-                <div className="space-y-3 p-4 rounded-2xl bg-amber-50/50 dark:bg-amber-950/20 border border-amber-200 dark:border-amber-900">
-                  <div className="flex items-center justify-between">
-                    <div className="flex items-center gap-2">
-                      <FileText className="w-4 h-4 text-amber-600" />
-                      <h3 className="font-bold text-sm text-gray-900 dark:text-white">
-                        {t('الكتب والأبحاث والمستندات (PDF / Books)')}
-                      </h3>
-                    </div>
-                    <span className="text-[10px] text-amber-700 dark:text-amber-300 font-bold">
-                      {t('تحميل مباشر مجاني')}
-                    </span>
-                  </div>
-
-                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-                    {filteredDocuments.map((doc) => (
-                      <div
-                        key={doc.id}
-                        className="p-3.5 rounded-xl border border-amber-200 dark:border-amber-800 bg-white dark:bg-[#202124] flex flex-col justify-between"
-                      >
-                        <div>
-                          <div className="flex items-center justify-between gap-1.5 mb-1.5">
-                            <div className="flex items-center gap-1.5">
-                              <span className="px-1.5 py-0.5 rounded bg-red-600 text-white font-mono text-[9px] font-bold">
-                                {doc.format}
-                              </span>
-                              <span className="text-[10px] text-gray-400">{doc.size}</span>
-                            </div>
-                            {doc.langBadge && (
-                              <span
-                                className={`px-2 py-0.5 rounded-full font-bold text-[9px] ${
-                                  doc.langTier === 'ar'
-                                    ? 'bg-emerald-100 text-emerald-800 dark:bg-emerald-950 dark:text-emerald-300'
-                                    : doc.langTier === 'en'
-                                    ? 'bg-blue-100 text-blue-800 dark:bg-blue-950 dark:text-blue-300'
-                                    : 'bg-purple-100 text-purple-800 dark:bg-purple-950 dark:text-purple-300'
-                                }`}
-                              >
-                                {doc.langBadge}
-                              </span>
-                            )}
-                          </div>
-                          <h4 className="font-bold text-xs text-gray-900 dark:text-white mb-1">
-                            {t(doc.title)}
-                          </h4>
-                          <p className="text-[11px] text-gray-600 dark:text-gray-400 line-clamp-2">
-                            {t(doc.snippet)}
-                          </p>
-                        </div>
-
-                        <div className="flex items-center justify-between mt-3 pt-2 border-t border-gray-100 dark:border-gray-800">
-                          <span className="text-[10px] text-gray-400">{t(doc.author)}</span>
-                          <button
-                            type="button"
-                            onClick={() => showToast(`تم بدء تنزيل ${doc.title}`)}
-                            className="px-3 py-1 rounded-lg bg-amber-600 hover:bg-amber-700 text-white font-bold text-xs flex items-center gap-1 cursor-pointer"
-                          >
-                            <Download className="w-3 h-3" />
-                            <span>{t('تحميل')}</span>
-                          </button>
-                        </div>
-                      </div>
-                    ))}
-                  </div>
-                </div>
-              )}
-
-            {/* هـ) نتائج الويب العضوية (Organic Web Results) */}
-            {(selectedVertical === 'all' || selectedVertical === 'news') && (
-              <div className="space-y-4 pt-2">
-                <h3 className="font-bold text-sm text-gray-900 dark:text-white">{t('نتائج الويب')}</h3>
-
-                <div className="space-y-3">
-                  {filteredWebResults.slice(0, webVisibleCount).map((item) => (
-                    <div
-                      key={item.id}
-                      onClick={() => navigateCurrentTab(item.url)}
-                      className="p-3.5 rounded-2xl border border-gray-100 dark:border-gray-800 hover:border-blue-400 dark:hover:border-blue-600 transition cursor-pointer group bg-white dark:bg-[#2B2D30]"
-                    >
-                      <div className="flex items-center justify-between mb-1">
-                        <div className="flex items-center gap-2 text-[11px] text-gray-500">
-                          <div className="w-4 h-4 rounded-full bg-gray-200 dark:bg-gray-700 flex items-center justify-center font-bold text-[9px]">
-                            🌐
-                          </div>
-                          <span className="font-mono text-gray-700 dark:text-gray-300 font-semibold">
-                            {item.domain}
-                          </span>
-                          <span>›</span>
-                          <span className="text-gray-400 truncate">{item.path}</span>
-                        </div>
-
-                        {item.langBadge && (
-                          <span
-                            className={`px-2 py-0.5 rounded-full font-bold text-[9px] ${
-                              item.langTier === 'ar'
-                                ? 'bg-emerald-100 text-emerald-800 dark:bg-emerald-950 dark:text-emerald-300 border border-emerald-300 dark:border-emerald-700'
-                                : item.langTier === 'en'
-                                ? 'bg-blue-100 text-blue-800 dark:bg-blue-950 dark:text-blue-300 border border-blue-300 dark:border-blue-700'
-                                : 'bg-purple-100 text-purple-800 dark:bg-purple-950 dark:text-purple-300 border border-purple-300 dark:border-purple-700'
-                            }`}
-                          >
-                            {item.langBadge}
-                          </span>
-                        )}
-                      </div>
-
-                      <h4 className="text-sm font-bold text-blue-700 dark:text-blue-400 group-hover:underline mb-1">
-                        {t(item.title)}
-                      </h4>
-
-                      <p className="text-xs text-gray-600 dark:text-gray-400 leading-relaxed">
-                        {t(item.snippet)}
-                      </p>
-                    </div>
-                  ))}
-                </div>
-
-                {webVisibleCount < filteredWebResults.length && (
-                  <button
-                    type="button"
-                    onClick={() => {
-                      setWebVisibleCount((c) => Math.min(filteredWebResults.length, c + 3));
-                      showToast('تم تحميل المزيد من نتائج الويب');
-                    }}
-                    className="w-full py-2.5 rounded-xl border border-gray-200 dark:border-gray-700 bg-gray-50 dark:bg-white/5 hover:bg-gray-100 text-xs font-bold text-blue-600 transition cursor-pointer"
-                  >
-                    {t('المزيد من نتائج الويب ⬇️')}
-                  </button>
-                )}
-              </div>
-            )}
-
-            {/* و) قسم "تم البحث أيضًا عن" (Related Searches) */}
-            <div className="p-4 rounded-2xl bg-gray-50 dark:bg-white/5 border border-gray-200 dark:border-gray-700 space-y-2.5">
-              <h3 className="font-bold text-xs text-gray-700 dark:text-gray-300">
-                {t('تم البحث أيضًا عن (Related Searches)')}
-              </h3>
-              <div className="flex flex-wrap gap-2">
-                {verticalData.relatedSearches.map((term, i) => (
-                  <button
-                    key={i}
-                    type="button"
-                    onClick={() => navigateCurrentTab(term)}
-                    className="px-3.5 py-1.5 rounded-full bg-white dark:bg-[#2B2D30] border border-gray-200 dark:border-gray-700 text-xs font-semibold hover:border-blue-500 hover:text-blue-600 transition cursor-pointer flex items-center gap-1.5 shadow-2xs"
-                  >
-                    <Search className="w-3 h-3 text-gray-400" />
-                    <span>{t(term)}</span>
-                  </button>
-                ))}
-              </div>
-            </div>
-          </div>
+        {isNewTabPage ? (
+          <ChromeNewTabPage
+            onNavigate={navigateCurrentTab}
+            onSearch={(q) => navigateCurrentTab(q)}
+            onOpenVoiceSearch={() => {
+              setIsVoiceListening(true);
+              showToast("🎤 جاري الاستماع لصوتك...");
+              setTimeout(() => {
+                setIsVoiceListening(false);
+                navigateCurrentTab("أفلام سينمائية مترجمة");
+              }, 1800);
+            }}
+          />
+        ) : isSearchPage ? (
+          <ChromeSERP
+            query={searchQuery || currentQueryParsed.clean}
+            onSearch={(q) => navigateCurrentTab(q)}
+            onNavigate={navigateCurrentTab}
+            onPlayVideo={handlePlayVideo}
+            targetLanguage={targetLanguage}
+            t={t}
+          />
         ) : (
           /* عرض صفحة ويب خارجية حقيقية داخل المتصفح */
           <div className="w-full h-full relative">
