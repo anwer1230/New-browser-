@@ -42,7 +42,7 @@ const DEFAULT_SHORTCUTS: ShortcutItem[] = [
 ];
 
 const GOOGLE_APPS = [
-  { name: 'بحث Google', url: 'https://www.google.com', icon: '🔍', color: 'bg-blue-50' },
+  { name: 'بحث Google', url: 'chrome://newtab', icon: '🔍', color: 'bg-blue-50' },
   { name: 'YouTube', url: 'https://www.youtube.com', icon: '▶️', color: 'bg-red-50' },
   { name: 'الخرائط', url: 'https://maps.google.com', icon: '🗺️', color: 'bg-emerald-50' },
   { name: 'الأخبار', url: 'https://news.google.com', icon: '📰', color: 'bg-sky-50' },
@@ -119,6 +119,17 @@ export const ChromeNewTabPage: React.FC<ChromeNewTabPageProps> = ({
     e.preventDefault();
     const clean = searchInput.trim();
     if (!clean) return;
+
+    // إذا كان رابط جوجل الرئيسي، نفتح صفحة كروم الجديدة لتجنب 403
+    if (
+      clean.toLowerCase() === 'google.com' ||
+      clean.toLowerCase() === 'www.google.com' ||
+      clean.toLowerCase() === 'https://google.com' ||
+      clean.toLowerCase() === 'https://www.google.com'
+    ) {
+      onNavigate('chrome://newtab');
+      return;
+    }
 
     // إذا كان رابطاً مباشراً
     if (

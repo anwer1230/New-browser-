@@ -75,7 +75,7 @@ interface Tab {
 }
 
 const DEFAULT_BOOKMARKS: BookmarkEntry[] = [
-  { id: 'bm_google', title: 'Google', url: 'https://www.google.com', favicon: 'https://www.google.com/favicon.ico' },
+  { id: 'bm_google', title: 'Google', url: 'chrome://newtab', favicon: 'https://www.google.com/favicon.ico' },
   { id: 'bm_yt', title: 'YouTube', url: 'https://www.youtube.com', favicon: 'https://www.youtube.com/favicon.ico' },
   { id: 'bm_gmail', title: 'Gmail', url: 'https://mail.google.com', favicon: 'https://mail.google.com/favicon.ico' },
   { id: 'bm_maps', title: 'خرائط Google', url: 'https://maps.google.com', favicon: 'https://maps.google.com/favicon.ico' },
@@ -207,7 +207,30 @@ export default function App() {
     let finalUrl = clean;
 
     // معالجة الروابط وعمليات بحث Google
-    if (clean.startsWith('chrome://')) {
+    const lowerClean = clean.toLowerCase();
+
+    // 1. منع خطأ 403: إذا كان الرابط موجهاً إلى صفحة Google الرئيسية
+    if (
+      lowerClean === 'google.com' ||
+      lowerClean === 'www.google.com' ||
+      lowerClean === 'https://google.com' ||
+      lowerClean === 'https://www.google.com' ||
+      lowerClean === 'http://google.com' ||
+      lowerClean === 'http://www.google.com' ||
+      lowerClean === 'https://google.com/' ||
+      lowerClean === 'https://www.google.com/'
+    ) {
+      finalUrl = 'chrome://newtab';
+    } else if (lowerClean.includes('google.com/search')) {
+      // استخراج معامل البحث q لفتحه عبر محرك كروم الداخلي بدون 403
+      try {
+        const parsed = new URL(clean.startsWith('http') ? clean : `https://${clean}`);
+        const q = parsed.searchParams.get('q');
+        finalUrl = q ? `chrome://search?q=${encodeURIComponent(q)}` : 'chrome://newtab';
+      } catch {
+        finalUrl = 'chrome://newtab';
+      }
+    } else if (clean.startsWith('chrome://')) {
       finalUrl = clean;
     } else if (clean.startsWith('http://') || clean.startsWith('https://')) {
       finalUrl = clean;
@@ -737,15 +760,42 @@ export default function App() {
           />
         )}
 
-        {/* عرض صفحات الويب الحقيقية (WebView iframe) */}
+        {/* عرض صفحات الويب الحقيقية (WebView iframe مع معالجة قيود التضمين ومنع 403) */}
         {!activeTab?.url.startsWith('chrome://') && (
-          <div className="w-full h-full relative">
-            <iframe
-              src={activeTab?.url}
-              className="w-full h-full border-none"
-              sandbox="allow-same-origin allow-scripts allow-forms allow-popups allow-modals"
-              title={activeTab?.title}
-            />
+          <div className="w-full h-full flex flex-col bg-white dark:bg-[#202124]">
+            {/* شريط معلومات صفحة الويب الخارجية */}
+            <div className="flex items-center justify-between px-4 py-1.5 bg-[#F8F9FA] dark:bg-[#292A2D] border-b border-[#DADCE0] dark:border-[#3C4043] text-xs">
+              <div className="flex items-center gap-2 text-[#5F6368] dark:text-[#9AA0A6]">
+                <Lock className="w-3.5 h-3.5 text-[#137333]" />
+                <span className="font-mono text-[11px] truncate max-w-sm">{activeTab?.url}</span>
+              </div>
+              <div className="flex items-center gap-2">
+                <button
+                  onClick={() => window.open(activeTab?.url, '_blank')}
+                  className="flex items-center gap-1.5 px-3 py-1 bg-[#1A73E8] text-white rounded-md text-[11px] font-medium hover:bg-[#1557B0] transition shadow-2xs"
+                  title="فتح في نافذة متصفح حقيقية لتجاوز أي قيود أمنية أو 403"
+                >
+                  <ExternalLink className="w-3.5 h-3.5" />
+                  <span>فتح في نافذة جديدة ↗</span>
+                </button>
+                <button
+                  onClick={() => navigateTo('chrome://newtab')}
+                  className="px-2.5 py-1 text-[#5F6368] dark:text-[#9AA0A6] hover:bg-black/5 dark:hover:bg-white/10 rounded-md transition text-[11px]"
+                >
+                  الرئيسية 🏠
+                </button>
+              </div>
+            </div>
+
+            {/* إطار عرض الصفحة */}
+            <div className="flex-1 relative">
+              <iframe
+                src={activeTab?.url}
+                className="w-full h-full border-none"
+                sandbox="allow-same-origin allow-scripts allow-forms allow-popups allow-modals"
+                title={activeTab?.title}
+              />
+            </div>
           </div>
         )}
       </div>
