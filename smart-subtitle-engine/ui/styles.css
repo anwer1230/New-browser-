@@ -1,0 +1,110 @@
+.sse-header {
+  display: flex;
+  justify-content: space-between;
+  padding: 15px;
+  background: linear-gradient(135deg, #667eea, #764ba2);
+  color: white;
+  border-radius: 10px;
+  margin-bottom: 20px;
+}
+
+.sse-code {
+  background: rgba(255,255,255,0.2);
+  padding: 3px 10px;
+  border-radius: 15px;
+  margin: 0 5px;
+  font-family: monospace;
+  font-weight: bold;
+}
+
+.sse-group {
+  margin-bottom: 25px;
+}
+
+.sse-group-title {
+  font-size: 18px;
+  margin-bottom: 10px;
+  padding-bottom: 8px;
+  border-bottom: 2px solid #eee;
+  color: #333;
+}
+
+.sse-count {
+  background: #667eea;
+  color: white;
+  padding: 2px 8px;
+  border-radius: 10px;
+  font-size: 12px;
+}
+
+.sse-cards {
+  display: grid;
+  gap: 10px;
+}
+
+.sse-card {
+  padding: 15px;
+  background: #fff;
+  border: 1px solid #e0e0e0;
+  border-radius: 8px;
+  cursor: pointer;
+  transition: all 0.2s;
+}
+
+.sse-card:hover {
+  border-color: #667eea;
+  box-shadow: 0 4px 12px rgba(102,126,234,0.15);
+  transform: translateY(-2px);
+}
+
+.sse-card-header {
+  display: flex;
+  justify-content: space-between;
+  margin-bottom: 8px;
+}
+
+.sse-domain {
+  font-size: 12px;
+  color: #888;
+}
+
+.sse-badge-ar {
+  background: #4CAF50;
+  color: white;
+  padding: 2px 8px;
+  border-radius: 10px;
+  font-size: 11px;
+}
+
+.sse-card-title {
+  display: block;
+  font-size: 16px;
+  color: #1a73e8;
+  text-decoration: none;
+  margin-bottom: 8px;
+  font-weight: 500;
+}
+
+.sse-card-snippet {
+  color: #555;
+  font-size: 14px;
+  line-height: 1.5;
+  margin: 8px 0;
+}
+
+.sse-card-footer {
+  display: flex;
+  gap: 15px;
+  font-size: 12px;
+  color: #888;
+  margin-top: 10px;
+}
+
+.sse-notice {
+  background: #fff3cd;
+  border: 1px solid #ffc107;
+  padding: 12px;
+  border-radius: 8px;
+  margin-bottom: 15px;
+  color: #856404;
+}
