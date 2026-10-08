@@ -566,17 +566,25 @@ export const ReaderModeView: React.FC<ReaderModeViewProps> = ({
                       src={readerData.videoEmbedUrl}
                       title={readerData.title}
                       className="w-full h-full border-0"
-                      allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture"
+                      sandbox="allow-scripts allow-same-origin allow-forms allow-popups allow-modals allow-presentation allow-downloads allow-pointer-lock allow-orientation-lock"
+                      allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture; web-share; fullscreen"
                       allowFullScreen
                     />
                   ) : readerData.videoDirectUrl ? (
                     <video
-                      src={readerData.videoDirectUrl}
                       controls
                       autoPlay
+                      playsInline
+                      crossOrigin="anonymous"
+                      preload="auto"
                       className="w-full h-full object-contain"
                       poster={readerData.heroImage}
-                    />
+                    >
+                      <source src={readerData.videoDirectUrl} type="video/mp4; codecs='avc1.42E01E, mp4a.40.2'" />
+                      <source src={readerData.videoDirectUrl.replace(/\.mp4$/i, '.webm')} type="video/webm; codecs='vp8, vorbis'" />
+                      <source src={readerData.videoDirectUrl.replace(/\.mp4$/i, '.ogv')} type="video/ogg; codecs='theora, vorbis'" />
+                      <p className="p-4 text-xs text-white">متصفحك لا يدعم تشغيل هذا الفيديو مباشرة.</p>
+                    </video>
                   ) : (
                     <div className="w-full h-full flex items-center justify-center text-white/70 text-sm">
                       مشغل الفيديو النقي متاح ومجهّز

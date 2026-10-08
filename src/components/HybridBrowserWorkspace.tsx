@@ -82,7 +82,7 @@ interface BrowserTabItem {
   offlineHtml?: string | null;
 }
 
-interface HybridBrowserWorkspaceProps {
+export interface AnwerBrowserWorkspaceProps {
   activeSubView: BrowserSectionView;
   onChangeSubView: (view: BrowserSectionView) => void;
   user: User | null;
@@ -1831,7 +1831,19 @@ export const AnwerBrowserWorkspace: React.FC<AnwerBrowserWorkspaceProps> = ({
                         {directPageData.discovered_videos.slice(0, 2).map((vid: any) => (
                           <div key={vid.id} className="rounded-xl overflow-hidden border border-gray-200 dark:border-gray-800 bg-gray-50 dark:bg-black/20">
                             {vid.stream_url ? (
-                              <video src={vid.stream_url} poster={vid.thumbnail} controls className="w-full h-40 object-cover bg-black" />
+                              <video
+                                poster={vid.thumbnail}
+                                controls
+                                playsInline
+                                crossOrigin="anonymous"
+                                preload="metadata"
+                                className="w-full h-40 object-cover bg-black"
+                              >
+                                <source src={vid.stream_url} type="video/mp4; codecs='avc1.42E01E, mp4a.40.2'" />
+                                <source src={vid.stream_url.replace(/\.mp4$/i, '.webm')} type="video/webm; codecs='vp8, vorbis'" />
+                                <source src={vid.stream_url.replace(/\.mp4$/i, '.ogv')} type="video/ogg; codecs='theora, vorbis'" />
+                                <p className="text-xs text-white p-2">متصفحك لا يدعم هذا الفيديو.</p>
+                              </video>
                             ) : null}
                             <div className="p-2.5">
                               <p className="text-xs font-bold line-clamp-1">{vid.title}</p>

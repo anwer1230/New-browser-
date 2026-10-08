@@ -3,7 +3,7 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
-import React, { useState, useEffect, useRef, useMemo } from 'react';
+import React, { useState, useEffect, useRef, useMemo, useCallback } from 'react';
 import {
   Globe,
   Shield,
@@ -58,7 +58,12 @@ import {
   BookOpen,
   FileText,
   SlidersHorizontal,
+  Languages,
+  AlertCircle,
+  RefreshCw,
 } from 'lucide-react';
+
+import { SUPPORTED_LANGUAGES, translateTextOnline } from './services/translator.ts';
 
 // ══════════════════════════════════════════════════════════════════════
 // 1. نماذج بيانات المحرك البرمجي والعمليات المتعددة (Engine Data Models)
@@ -92,6 +97,8 @@ export interface VideoItem {
   views: string;
   date: string;
   isCachedOffline: boolean;
+  langTier?: 'ar' | 'en' | 'orig';
+  langBadge?: string;
 }
 
 export interface AppItem {
@@ -103,6 +110,8 @@ export interface AppItem {
   reviewsCount: string;
   icon: string;
   installed?: boolean;
+  langTier?: 'ar' | 'en' | 'orig';
+  langBadge?: string;
 }
 
 export interface DocumentItem {
@@ -113,6 +122,8 @@ export interface DocumentItem {
   size: string;
   snippet: string;
   url: string;
+  langTier?: 'ar' | 'en' | 'orig';
+  langBadge?: string;
 }
 
 export interface WebResultItem {
@@ -122,6 +133,8 @@ export interface WebResultItem {
   path: string;
   url: string;
   snippet: string;
+  langTier?: 'ar' | 'en' | 'orig';
+  langBadge?: string;
 }
 
 export interface ProcessItem {
@@ -198,6 +211,38 @@ const AVAILABLE_VPN_SERVERS: VpnServerInfo[] = [
     protocol: 'WireGuard Stealth-Tunnel',
   },
 ];
+
+/**
+ * تحليل روابط الفيديوهات المضمنة (YouTube / Vimeo / External Embeds)
+ */
+function getEmbedVideoInfo(url: string): { isEmbed: boolean; embedUrl: string } {
+  if (!url) return { isEmbed: false, embedUrl: '' };
+  const ytMatch = url.match(/(?:youtu\.be\/|youtube\.com\/(?:embed\/|v\/|watch\?v=|watch\?.+&v=))([\w-]{11})/);
+  if (ytMatch && ytMatch[1]) {
+    return {
+      isEmbed: true,
+      embedUrl: `https://www.youtube-nocookie.com/embed/${ytMatch[1]}?autoplay=1&enablejsapi=1`,
+    };
+  }
+  const vimeoMatch = url.match(/vimeo\.com\/(?:channels\/(?:\w+\/)?|groups\/([^\/]*)\/videos\/|album\/(\d+)\/video\/|)(\d+)/);
+  if (vimeoMatch && vimeoMatch[3]) {
+    return {
+      isEmbed: true,
+      embedUrl: `https://player.vimeo.com/video/${vimeoMatch[3]}?autoplay=1`,
+    };
+  }
+  return { isEmbed: false, embedUrl: '' };
+}
+
+/**
+ * تجهيز مسارات مصادر الفيديو بتنسيقات الويب القياسية المدعومة (MP4, WebM, OGG)
+ */
+function getVideoSourceUrls(baseStreamUrl: string): { mp4Url: string; webmUrl: string; oggUrl: string } {
+  const mp4Url = baseStreamUrl;
+  const webmUrl = baseStreamUrl.replace(/\.mp4$/i, '.webm');
+  const oggUrl = baseStreamUrl.replace(/\.mp4$/i, '.ogv');
+  return { mp4Url, webmUrl, oggUrl };
+}
 
 // ══════════════════════════════════════════════════════════════════════
 // 2. الآلية البرمجية 1: تحليل الاستعلام (Query Parsing & Normalization)
@@ -313,183 +358,470 @@ function parseAndAnalyzeQuery(raw: string): ParsedQuery {
 // ══════════════════════════════════════════════════════════════════════
 
 function generateVerticalResults(query: string, intents: SearchIntent[]) {
-  const q = query.trim() || 'songs';
+  const rawQ = query.trim() || 'songs';
+  const cleanName = rawQ.replace(/^(فيلم|فلم|أغنية|اغنية|movie|song)\s+/i, '').trim() || rawQ;
+  const lower = rawQ.toLowerCase();
 
-  // أ) البحث العمودي في قاعدة بيانات الفيديوهات (Videos Vertical)
-  const allVideos: VideoItem[] = [
-    {
-      id: 'v_1',
-      title: `${q.toUpperCase()} - THE BEST SONGS & HITS OF ALL TIME`,
-      channel: 'Lewis Capaldi · YouTube',
-      streamUrl: 'https://commondatastorage.googleapis.com/gtv-videos-bucket/sample/TearsOfSteel.mp4',
-      thumbnail: 'https://images.unsplash.com/photo-1511671782779-c97d3d27a1d4?w=600&q=80',
-      duration: '16:26',
-      views: '42.8M مشاهدة',
-      date: '2026/07/06',
-      isCachedOffline: true,
-    },
-    {
-      id: 'v_2',
-      title: `Top ${q} Mix 2026 - Official Streaming & Visualizer`,
-      channel: 'Vevo Global · YouTube',
-      streamUrl: 'https://commondatastorage.googleapis.com/gtv-videos-bucket/sample/Sintel.mp4',
-      thumbnail: 'https://images.unsplash.com/photo-1470225620780-dba8ba36b745?w=600&q=80',
-      duration: '1:58:13',
-      views: '18.4M مشاهدة',
-      date: 'منذ أسبوعين',
-      isCachedOffline: true,
-    },
-    {
-      id: 'v_3',
-      title: `دليل شامل وشرح تفصيلي حول: ${q}`,
-      channel: 'Tech Explorer · YouTube',
-      streamUrl: 'https://commondatastorage.googleapis.com/gtv-videos-bucket/sample/ElephantsDream.mp4',
-      thumbnail: 'https://images.unsplash.com/photo-1451187580459-43490279c0fa?w=600&q=80',
-      duration: '10:54',
-      views: '5.2M مشاهدة',
-      date: 'قبل 3 أيام',
-      isCachedOffline: true,
-    },
-    {
-      id: 'v_4',
-      title: `أروع المقاطع الصوتية والحماسية ذات الصلة بـ ${q}`,
-      channel: 'Blender Studio · YouTube',
-      streamUrl: 'https://commondatastorage.googleapis.com/gtv-videos-bucket/sample/BigBuckBunny.mp4',
-      thumbnail: 'https://images.unsplash.com/photo-1534447677768-be436bb09401?w=600&q=80',
-      duration: '09:56',
-      views: '9.1M مشاهدة',
-      date: 'قبل 5 أيام',
-      isCachedOffline: true,
-    },
-    {
-      id: 'v_5',
-      title: `البث الحي المباشر للأعمال المميزة: ${q} Live Special`,
-      channel: 'BBC Music · YouTube',
-      streamUrl: 'https://commondatastorage.googleapis.com/gtv-videos-bucket/sample/TearsOfSteel.mp4',
-      thumbnail: 'https://images.unsplash.com/photo-1514525253161-7a46d19cd819?w=600&q=80',
-      duration: '24:18',
-      views: '3.6M مشاهدة',
-      date: 'أمس',
-      isCachedOffline: true,
-    },
-  ];
+  const isMovieOrCinema =
+    lower.includes('فيلم') ||
+    lower.includes('فلم') ||
+    lower.includes('سينما') ||
+    lower.includes('movie') ||
+    lower.includes('film') ||
+    lower.includes('cinema') ||
+    lower.includes('مسلسل') ||
+    lower.includes('series') ||
+    lower.includes('season') ||
+    lower.includes('avatar') ||
+    lower.includes('inception') ||
+    lower.includes('interstellar') ||
+    lower.includes('batman') ||
+    lower.includes('spiderman') ||
+    lower.includes('spider-man') ||
+    lower.includes('joker') ||
+    lower.includes('dune') ||
+    lower.includes('titanic') ||
+    lower.includes('oppenheimer') ||
+    lower.includes('gladiator') ||
+    lower.includes('matrix');
 
-  // ب) البحث العمودي في متجر التطبيقات (Apps Vertical - Google Play)
+  const isSongOrMusic =
+    !isMovieOrCinema &&
+    (lower.includes('أغنية') ||
+      lower.includes('اغنية') ||
+      lower.includes('أغاني') ||
+      lower.includes('اغاني') ||
+      lower.includes('موسيقى') ||
+      lower.includes('song') ||
+      lower.includes('music') ||
+      lower.includes('hits') ||
+      lower.includes('adele') ||
+      lower.includes('songs') ||
+      intents.includes('media_music'));
+
+  // أ) البحث العمودي في الفيديوهات مرتبة بالأولوية: عربي أولاً ➔ إنجليزي ثانياً ➔ لغات أخرى ثالثاً
+  let allVideos: VideoItem[] = [];
+
+  if (isMovieOrCinema) {
+    allVideos = [
+      // 1. النتائج المترجمة للعربية أولاً (Tier 1: Arabic Translated)
+      {
+        id: 'v_ar_1',
+        title: `فيلم ${cleanName} مترجم للعربية كامل HD (مشاهدة مباشرة وسيرفرات سريعة)`,
+        channel: 'سينما العرب · YouTube',
+        streamUrl: 'https://commondatastorage.googleapis.com/gtv-videos-bucket/sample/TearsOfSteel.mp4',
+        thumbnail: 'https://images.unsplash.com/photo-1489599849927-2ee91cede3ba?w=600&q=80',
+        duration: '2:14:30',
+        views: '3.4M مشاهدة',
+        date: 'ترجمة احترافية 2026',
+        isCachedOffline: true,
+        langTier: 'ar',
+        langBadge: 'مترجم للعربية 🇸🇦',
+      },
+      {
+        id: 'v_ar_2',
+        title: `${cleanName} النسخة المدبلجة والمترجمة للعربية بدقة 1080p BluRay`,
+        channel: 'مترجم بالعربي · Vevo',
+        streamUrl: 'https://commondatastorage.googleapis.com/gtv-videos-bucket/sample/Sintel.mp4',
+        thumbnail: 'https://images.unsplash.com/photo-1517604931442-7e0c8ed2963c?w=600&q=80',
+        duration: '1:58:13',
+        views: '1.8M مشاهدة',
+        date: 'مدبلج ومترجم للعربية',
+        isCachedOffline: true,
+        langTier: 'ar',
+        langBadge: 'مترجم للعربية 🇸🇦',
+      },
+      {
+        id: 'v_ar_3',
+        title: `مشاهدة فيلم ${cleanName} مترجم للعربي أونلاين - القصة والأحداث كاملة`,
+        channel: 'عرب سينما الرسمي',
+        streamUrl: 'https://commondatastorage.googleapis.com/gtv-videos-bucket/sample/ElephantsDream.mp4',
+        thumbnail: 'https://images.unsplash.com/photo-1478760329108-5c3ed9d495a0?w=600&q=80',
+        duration: '10:54',
+        views: '940K مشاهدة',
+        date: 'مترجم عربي معتمد',
+        isCachedOffline: true,
+        langTier: 'ar',
+        langBadge: 'مترجم للعربية 🇸🇦',
+      },
+      // 2. النتائج باللغة الإنجليزية ثانياً (Tier 2: English Version)
+      {
+        id: 'v_en_1',
+        title: `${cleanName} Full Movie (Official English Audio & Subtitles) - HD Stream`,
+        channel: 'Warner Bros / Sony Global',
+        streamUrl: 'https://commondatastorage.googleapis.com/gtv-videos-bucket/sample/BigBuckBunny.mp4',
+        thumbnail: 'https://images.unsplash.com/photo-1536440136628-849c177e76a1?w=600&q=80',
+        duration: '2:22:15',
+        views: '14.2M views',
+        date: 'English Release',
+        isCachedOffline: true,
+        langTier: 'en',
+        langBadge: 'English Version 🇺🇸',
+      },
+      {
+        id: 'v_en_2',
+        title: `${cleanName} 4K Ultra HD (Original English Dub/Sub Release)`,
+        channel: 'Paramount Pictures Official',
+        streamUrl: 'https://commondatastorage.googleapis.com/gtv-videos-bucket/sample/TearsOfSteel.mp4',
+        thumbnail: 'https://images.unsplash.com/photo-1518676590629-3dcbd9c5a5c9?w=600&q=80',
+        duration: '24:18',
+        views: '6.7M views',
+        date: 'English Original',
+        isCachedOffline: true,
+        langTier: 'en',
+        langBadge: 'English Version 🇺🇸',
+      },
+      // 3. لغات أخرى / النسخة الأصلية ثالثاً (Tier 3: Original / Other Languages)
+      {
+        id: 'v_orig_1',
+        title: `${cleanName} (International Festival Master / Multi-Language CC & Audio)`,
+        channel: 'Global Cinema Worldwide',
+        streamUrl: 'https://commondatastorage.googleapis.com/gtv-videos-bucket/sample/Sintel.mp4',
+        thumbnail: 'https://images.unsplash.com/photo-1440404653325-ab127d49abc1?w=600&q=80',
+        duration: '14:20',
+        views: '820K views',
+        date: 'Multi-Language Edition',
+        isCachedOffline: true,
+        langTier: 'orig',
+        langBadge: 'لغات أخرى / الأصلية 🌐',
+      },
+    ];
+  } else if (isSongOrMusic) {
+    allVideos = [
+      // 1. النتائج المترجمة للعربية أولاً (Tier 1: Arabic Translated)
+      {
+        id: 'v_ar_1',
+        title: `أغنية ${cleanName} مترجمة للعربية بالكلمات الحصرية (Arabic Lyrics Translation)`,
+        channel: 'ترجمات الأغاني العربية · YouTube',
+        streamUrl: 'https://commondatastorage.googleapis.com/gtv-videos-bucket/sample/TearsOfSteel.mp4',
+        thumbnail: 'https://images.unsplash.com/photo-1511671782779-c97d3d27a1d4?w=600&q=80',
+        duration: '04:15',
+        views: '5.2M مشاهدة',
+        date: 'مترجمة للعربية',
+        isCachedOffline: true,
+        langTier: 'ar',
+        langBadge: 'مترجم للعربية 🇸🇦',
+      },
+      {
+        id: 'v_ar_2',
+        title: `${cleanName} النسخة المترجمة للعربية بدقة عالية مع معاني الكلمات الكاملة`,
+        channel: 'Arabic Vevo Subtitles',
+        streamUrl: 'https://commondatastorage.googleapis.com/gtv-videos-bucket/sample/Sintel.mp4',
+        thumbnail: 'https://images.unsplash.com/photo-1470225620780-dba8ba36b745?w=600&q=80',
+        duration: '03:45',
+        views: '2.1M مشاهدة',
+        date: 'ترجمة معتمدة',
+        isCachedOffline: true,
+        langTier: 'ar',
+        langBadge: 'مترجم للعربية 🇸🇦',
+      },
+      {
+        id: 'v_ar_3',
+        title: `أغاني وموسيقى ${cleanName} مترجمة للعربي كاملة مع الشرح الصوتي`,
+        channel: 'موسيقى وترجمات الشرق',
+        streamUrl: 'https://commondatastorage.googleapis.com/gtv-videos-bucket/sample/ElephantsDream.mp4',
+        thumbnail: 'https://images.unsplash.com/photo-1514525253161-7a46d19cd819?w=600&q=80',
+        duration: '10:54',
+        views: '980K مشاهدة',
+        date: 'مترجمة للعربية',
+        isCachedOffline: true,
+        langTier: 'ar',
+        langBadge: 'مترجم للعربية 🇸🇦',
+      },
+      // 2. النتائج باللغة الإنجليزية ثانياً (Tier 2: English Version)
+      {
+        id: 'v_en_1',
+        title: `${cleanName} - Official Music Video & English Lyrics (Full HD)`,
+        channel: 'Official Artist Channel · Vevo',
+        streamUrl: 'https://commondatastorage.googleapis.com/gtv-videos-bucket/sample/BigBuckBunny.mp4',
+        thumbnail: 'https://images.unsplash.com/photo-1534447677768-be436bb09401?w=600&q=80',
+        duration: '03:52',
+        views: '42.8M views',
+        date: 'Official English Video',
+        isCachedOffline: true,
+        langTier: 'en',
+        langBadge: 'English Version 🇺🇸',
+      },
+      {
+        id: 'v_en_2',
+        title: `${cleanName} - Studio Master Audio Stream (English Release)`,
+        channel: 'BBC Music Global',
+        streamUrl: 'https://commondatastorage.googleapis.com/gtv-videos-bucket/sample/TearsOfSteel.mp4',
+        thumbnail: 'https://images.unsplash.com/photo-1451187580459-43490279c0fa?w=600&q=80',
+        duration: '24:18',
+        views: '8.4M views',
+        date: 'English Master',
+        isCachedOffline: true,
+        langTier: 'en',
+        langBadge: 'English Version 🇺🇸',
+      },
+      // 3. لغات أخرى / النسخة الأصلية ثالثاً (Tier 3: Original / Other Languages)
+      {
+        id: 'v_orig_1',
+        title: `${cleanName} (Worldwide Live Performance / Multi-Language CC)`,
+        channel: 'International Music Awards',
+        streamUrl: 'https://commondatastorage.googleapis.com/gtv-videos-bucket/sample/Sintel.mp4',
+        thumbnail: 'https://images.unsplash.com/photo-1489599849927-2ee91cede3ba?w=600&q=80',
+        duration: '06:12',
+        views: '1.2M views',
+        date: 'Global Multi-Lingual',
+        isCachedOffline: true,
+        langTier: 'orig',
+        langBadge: 'لغات أخرى / الأصلية 🌐',
+      },
+    ];
+  } else {
+    // استعلام عام أو تقني أو أدبي
+    allVideos = [
+      // 1. النتائج المترجمة للعربية أولاً (Tier 1: Arabic Translated)
+      {
+        id: 'v_ar_1',
+        title: `${cleanName} - الشرح والتفاصيل الكاملة باللغة العربية (مترجم ومعرّب)`,
+        channel: 'المعرفة الرقمية بالعربي · YouTube',
+        streamUrl: 'https://commondatastorage.googleapis.com/gtv-videos-bucket/sample/TearsOfSteel.mp4',
+        thumbnail: 'https://images.unsplash.com/photo-1511671782779-c97d3d27a1d4?w=600&q=80',
+        duration: '16:26',
+        views: '1.5M مشاهدة',
+        date: 'شرح مترجم للعربية',
+        isCachedOffline: true,
+        langTier: 'ar',
+        langBadge: 'مترجم للعربية 🇸🇦',
+      },
+      {
+        id: 'v_ar_2',
+        title: `دليل شامل ومترجم للعربية حول: ${cleanName} بالتفصيل الكامل`,
+        channel: 'Tech Explorer بالعربي',
+        streamUrl: 'https://commondatastorage.googleapis.com/gtv-videos-bucket/sample/Sintel.mp4',
+        thumbnail: 'https://images.unsplash.com/photo-1470225620780-dba8ba36b745?w=600&q=80',
+        duration: '10:54',
+        views: '820K مشاهدة',
+        date: 'مترجم للعربية',
+        isCachedOffline: true,
+        langTier: 'ar',
+        langBadge: 'مترجم للعربية 🇸🇦',
+      },
+      {
+        id: 'v_ar_3',
+        title: `${cleanName} - النسخة العربية المترجمة والموثقة للباحثين`,
+        channel: 'الأكاديمية المعربة',
+        streamUrl: 'https://commondatastorage.googleapis.com/gtv-videos-bucket/sample/ElephantsDream.mp4',
+        thumbnail: 'https://images.unsplash.com/photo-1451187580459-43490279c0fa?w=600&q=80',
+        duration: '12:30',
+        views: '450K مشاهدة',
+        date: 'مترجم عربي',
+        isCachedOffline: true,
+        langTier: 'ar',
+        langBadge: 'مترجم للعربية 🇸🇦',
+      },
+      // 2. النتائج باللغة الإنجليزية ثانياً (Tier 2: English Version)
+      {
+        id: 'v_en_1',
+        title: `${cleanName} - Comprehensive Guide & Insights (English Version)`,
+        channel: 'Global Tech & Culture · YouTube',
+        streamUrl: 'https://commondatastorage.googleapis.com/gtv-videos-bucket/sample/BigBuckBunny.mp4',
+        thumbnail: 'https://images.unsplash.com/photo-1534447677768-be436bb09401?w=600&q=80',
+        duration: '09:56',
+        views: '9.1M views',
+        date: 'English Edition',
+        isCachedOffline: true,
+        langTier: 'en',
+        langBadge: 'English Version 🇺🇸',
+      },
+      {
+        id: 'v_en_2',
+        title: `Official ${cleanName} Global Handbook & Deep Dive Overview`,
+        channel: 'BBC Insights Worldwide',
+        streamUrl: 'https://commondatastorage.googleapis.com/gtv-videos-bucket/sample/TearsOfSteel.mp4',
+        thumbnail: 'https://images.unsplash.com/photo-1514525253161-7a46d19cd819?w=600&q=80',
+        duration: '24:18',
+        views: '3.6M views',
+        date: 'English Master',
+        isCachedOffline: true,
+        langTier: 'en',
+        langBadge: 'English Version 🇺🇸',
+      },
+      // 3. لغات أخرى / النسخة الأصلية ثالثاً (Tier 3: Original / Other Languages)
+      {
+        id: 'v_orig_1',
+        title: `${cleanName} (Multi-Language Source & Global Archive Edition)`,
+        channel: 'International Archive',
+        streamUrl: 'https://commondatastorage.googleapis.com/gtv-videos-bucket/sample/Sintel.mp4',
+        thumbnail: 'https://images.unsplash.com/photo-1440404653325-ab127d49abc1?w=600&q=80',
+        duration: '14:20',
+        views: '710K views',
+        date: 'Original Global CC',
+        isCachedOffline: true,
+        langTier: 'orig',
+        langBadge: 'لغات أخرى / الأصلية 🌐',
+      },
+    ];
+  }
+
+  // ب) البحث العمودي في متجر التطبيقات (Apps Vertical)
   const allApps: AppItem[] = [
     {
       id: 'app_1',
-      name: 'Shazam: Music Discovery',
-      developer: 'Apple Inc.',
-      category: 'موسيقى وصوت',
-      rating: 4.6,
-      reviewsCount: '12,230,126',
-      icon: 'https://images.unsplash.com/photo-1511671782779-c97d3d27a1d4?w=100&q=80',
+      name: isMovieOrCinema ? `تطبيق سينما ${cleanName}: أفلام مترجمة بالعربي` : `تطبيق ${cleanName}: استماع وبث مترجم`,
+      developer: 'Arabic Apps Studio',
+      category: isMovieOrCinema ? 'أفلام ومسلسلات مترجمة' : 'موسيقى وصوت',
+      rating: 4.8,
+      reviewsCount: '840,126',
+      icon: 'https://images.unsplash.com/photo-1489599849927-2ee91cede3ba?w=100&q=80',
+      langTier: 'ar',
+      langBadge: 'تطبيق مترجم للعربية 🇸🇦',
     },
     {
       id: 'app_2',
-      name: 'Spotify: Music and Podcasts',
-      developer: 'Spotify AB',
-      category: 'استماع وبث',
-      rating: 4.5,
-      reviewsCount: '31,450,890',
+      name: isMovieOrCinema ? `${cleanName} Movies: English & Global Streaming` : `Spotify: ${cleanName} & Podcasts`,
+      developer: 'Global Media AB',
+      category: 'ترفيه عالمي',
+      rating: 4.6,
+      reviewsCount: '12,450,890',
       icon: 'https://images.unsplash.com/photo-1614680376593-902f749f7ffc?w=100&q=80',
+      langTier: 'en',
+      langBadge: 'English Version 🇺🇸',
     },
     {
       id: 'app_3',
-      name: 'YouTube Music Player',
-      developer: 'Google LLC',
-      category: 'فيديو وموسيقى',
+      name: `International Cinema Player: ${cleanName}`,
+      developer: 'Worldwide App LLC',
+      category: 'مشغلات عالمية',
       rating: 4.4,
-      reviewsCount: '8,920,410',
+      reviewsCount: '3,920,410',
       icon: 'https://images.unsplash.com/photo-1611162617213-7d7a39e9b1d7?w=100&q=80',
-    },
-    {
-      id: 'app_4',
-      name: 'SoundCloud: Play Music & Songs',
-      developer: 'SoundCloud Global',
-      category: 'مكتبة صوتية',
-      rating: 4.3,
-      reviewsCount: '6,150,000',
-      icon: 'https://images.unsplash.com/photo-1470225620780-dba8ba36b745?w=100&q=80',
+      langTier: 'orig',
+      langBadge: 'Multi-Language 🌐',
     },
   ];
 
-  // ج) البحث العمودي في الكتب والأبحاث وملفات PDF (Books & PDF Vertical)
+  // ج) البحث العمودي في الكتب والأبحاث وملفات PDF
   const allDocuments: DocumentItem[] = [
+    // 1. عربي أولاً
     {
-      id: 'doc_1',
-      title: `كتاب ودراسة شاملة حول تاريخ وتطور: ${q}`,
-      author: 'د. أحمد الشريف',
+      id: 'doc_ar_1',
+      title: isMovieOrCinema ? `كتاب السيناريو والقصة الكاملة لفيلم: ${cleanName} (مترجم للعربية)` : `كتاب ودراسة شاملة ومترجمة للعربية حول: ${cleanName}`,
+      author: 'د. سامي العلي · دار المعرفة العربية',
       format: 'PDF',
-      size: '4.8 MB',
-      snippet: `تحليل منهجي وتاريخي متعمق يستعرض نشأة ${q} وأبرز المراحل التحولية والتأثير الثقافي.`,
-      url: 'https://anwerbrowser.local/library/study.pdf',
+      size: '6.4 MB',
+      snippet: `مستند توثيقي مترجم ومعرّب يشتمل على تحليل سيناريو وأحداث ${cleanName} باللغة العربية الفصحى مع التوثيق الكامل.`,
+      url: 'https://anwerbrowser.local/library/arabic_study.pdf',
+      langTier: 'ar',
+      langBadge: 'مترجم للعربية 🇸🇦',
     },
     {
-      id: 'doc_2',
-      title: `الموسوعة الكاملة والمراجع المفتوحة: ${q} Edition`,
-      author: 'مؤسسة المعرفة الحرة',
+      id: 'doc_ar_2',
+      title: `الموسوعة المترجمة والمراجع العربية الكاملة: ${cleanName}`,
+      author: 'مؤسسة الترجمة الرقمية',
       format: 'PDF',
-      size: '12.2 MB',
-      snippet: `ملف بصيغة PDF يضم فهرساً شاملاً وتوثيقاً مفصلاً لكافة المفاهيم المرتبطة بـ ${q}.`,
-      url: 'https://anwerbrowser.local/library/encyclopedia.pdf',
+      size: '14.2 MB',
+      snippet: `ملف بصيغة PDF يضم فهرساً ومصطلحات معرّبة بالكامل تركز على شرح أبعاد ${cleanName}.`,
+      url: 'https://anwerbrowser.local/library/arabic_encyclopedia.pdf',
+      langTier: 'ar',
+      langBadge: 'مترجم للعربية 🇸🇦',
+    },
+    // 2. إنجليزي ثانياً
+    {
+      id: 'doc_en_1',
+      title: `Official Production Script & Comprehensive Guide: ${cleanName} (English Edition)`,
+      author: 'Global Publishing House',
+      format: 'PDF',
+      size: '8.9 MB',
+      snippet: `Original English documentation containing official screenplay, archival data, and reviews for ${cleanName}.`,
+      url: 'https://anwerbrowser.local/library/english_edition.pdf',
+      langTier: 'en',
+      langBadge: 'English Version 🇺🇸',
+    },
+    // 3. لغات أخرى ثالثاً
+    {
+      id: 'doc_orig_1',
+      title: `${cleanName} - International Archival Manuscript (Multi-Language PDF)`,
+      author: 'International Heritage Library',
+      format: 'PDF',
+      size: '11.5 MB',
+      snippet: `Original multilingual documents including source scripts, global translations and festival records.`,
+      url: 'https://anwerbrowser.local/library/international_doc.pdf',
+      langTier: 'orig',
+      langBadge: 'لغات أخرى / الأصلية 🌐',
     },
   ];
 
-  // د) البحث العمودي في الويب (Organic Web Results Vertical)
+  // د) البحث العمودي في الويب (Web Results) مرتبة: عربي أولاً ➔ إنجليزي ثانياً ➔ أخرى ثالثاً
   const allWebResults: WebResultItem[] = [
+    // 1. عربي أولاً
     {
-      id: 'web_1',
-      title: `THE BEST ${q.toUpperCase()} OF ALL TIME - Official Spotify Playlist`,
-      domain: 'open.spotify.com',
-      path: 'playlist > best-hits',
-      url: 'https://open.spotify.com',
-      snippet: `استمع إلى أشهر الأعمال المرتبطة بـ ${q} في قائمة التشغيل العالمية المحدثة لعام 2026. الملايين من المتابعين والبث المستمر.`,
+      id: 'web_ar_1',
+      title: isMovieOrCinema
+        ? `مشاهدة وتحميل ${cleanName} مترجم للعربية كامل بجودة عالية 1080p | عرب سينما`
+        : `استمع وحمّل ${cleanName} مترجمة للعربية مع الكلمات الكاملة | أنغامي عربية`,
+      domain: 'ar.cinema-online.com',
+      path: 'watch > arabic-sub',
+      url: 'https://ar.cinema-online.com',
+      snippet: `النسخة المترجمة للعربية مع توفير سيرفرات سريعة وبدون إعلانات. تم تدقيق الترجمة والكلمات باللغة العربية لمشاهدة ممتعة ومريحة.`,
+      langTier: 'ar',
+      langBadge: 'مترجم للعربية 🇸🇦',
     },
     {
-      id: 'web_2',
-      title: `${q} - Wikipedia, the free encyclopedia`,
+      id: 'web_ar_2',
+      title: `${cleanName} - ويكيبيديا العربية (الموسوعة الحرة باللغة العربية)`,
+      domain: 'ar.wikipedia.org',
+      path: `wiki > ${encodeURIComponent(cleanName)}`,
+      url: 'https://ar.wikipedia.org',
+      snippet: `تقرير شامل ومترجم للعربية يتناول قصة ${cleanName}، الممثلين أو المغنين، الجوائز، وتاريخ الإصدار مع تحليل نقدي معرّب.`,
+      langTier: 'ar',
+      langBadge: 'مترجم للعربية 🇸🇦',
+    },
+    // 2. إنجليزي ثانياً
+    {
+      id: 'web_en_1',
+      title: `${cleanName} - Official IMDb & Rotten Tomatoes Synopsis (English)`,
+      domain: 'imdb.com',
+      path: `title > ${encodeURIComponent(cleanName)}`,
+      url: 'https://imdb.com',
+      snippet: `Comprehensive English overview, cast info, verified user ratings, box office numbers, and official critical consensus.`,
+      langTier: 'en',
+      langBadge: 'English Version 🇺🇸',
+    },
+    {
+      id: 'web_en_2',
+      title: `${cleanName} - Wikipedia, the free encyclopedia (English)`,
       domain: 'en.wikipedia.org',
-      path: `wiki > ${encodeURIComponent(q)}`,
+      path: `wiki > ${encodeURIComponent(cleanName)}`,
       url: 'https://en.wikipedia.org',
-      snippet: `تعريف شامل، تاريخي، وتقني حول ${q} مع توثيق المصادر والشهادات التقديرية والتصنيفات المعتمدة عالمياً.`,
+      snippet: `In-depth historical and creative documentation in English covering development, release chronology, and international reception.`,
+      langTier: 'en',
+      langBadge: 'English Version 🇺🇸',
     },
+    // 3. لغات أخرى ثالثاً
     {
-      id: 'web_3',
-      title: `Billboard Hot Global Charts - Top Rankings for ${q}`,
-      domain: 'billboard.com',
-      path: 'charts > global-100',
-      url: 'https://billboard.com',
-      snippet: `إحصاءات بيلبورد الأسبوعية، نسب المبيعات، ومعدلات البث الرقمي الأكثر شعبية لهذا الأسبوع.`,
-    },
-    {
-      id: 'web_4',
-      title: `BBC Culture & Entertainment: Deep Dive into ${q}`,
-      domain: 'bbc.com',
-      path: 'culture > article',
-      url: 'https://bbc.com',
-      snippet: `تحقيق صحفي وثقافي يتناول الظواهر الفنية والتقنية التي شكلت مشهد ${q} الحديث.`,
+      id: 'web_orig_1',
+      title: `${cleanName} - International Festival Directory & Multi-Language Releases`,
+      domain: 'worldcinema.org',
+      path: 'international > releases',
+      url: 'https://worldcinema.org',
+      snippet: `Global releases, multilingual subtitles archive, festival entries, and original language commentary from worldwide critics.`,
+      langTier: 'orig',
+      langBadge: 'لغات أخرى / الأصلية 🌐',
     },
   ];
 
-  // هـ) النظرة العامة التوليدية (AI Overview Vertical)
+  // هـ) النظرة العامة التوليدية (AI Overview)
   const aiOverview = {
-    summary: `بناءً على تحليل الاستعلام "${q}"، تم تصنيف النية الأساسية كـ (${intents.join(', ')})، ويظهر توازن بين المحتوى الصوتي المرئي والتطبيقات المخصصة ومصادر الويب الموثوقة.`,
+    summary: `بناءً على طلبك، تم تفعيل نظام الترتيب والترجمة ذو الأولوية للاستعلام "${rawQ}": تم عرض النتائج المترجمة للعربية أولاً (🇸🇦)، تليها النتائج باللغة الإنجليزية (🇺🇸)، ثم لغات المصدر الأخرى (🌐) حتى استيفاء كافة النتائج.`,
     keyPoints: [
-      `تم ترتيب النتائج آلياً وفق الأهمية والشعبية الحالية لعام 2026.`,
-      `يمكنك تشغيل أي فيديو مباشرة داخل المتصفح، وسيُحفظ تلقائياً في السجل للمشاهدة بدون إنترنت.`,
-      `يتوفر قسم التطبيقات المباشرة لمتجر Google Play للوصول السريع إلى الأدوات ذات الصلة.`,
+      `النتائج المترجمة للعربية في الصدارة: تشمل الأفلام ومقاطع الفيديو والكتب وصفحات الويب المعربة مع روابط مشاهدة وتحميل فوري.`,
+      `النتائج الإنجليزية تليها تلقائياً: للمستخدمين الراغبين بمتابعة النسخ الأصلية أو الترجمة الإنجليزية.`,
+      `مشغل الفيديو المدمج يحفظ مقاطع الفيديو تلقائياً في السجل للمشاهدة بدون إنترنت مع الترجمة المصاحبة.`,
     ],
   };
 
   // و) الاقتراحات المترابطة (Related Searches)
   const relatedSearches = [
-    `A lot of ${q}`,
-    `${q} English 2026`,
-    `${q} popular hits`,
-    `أفضل ${q} لهذا العام`,
-    `${q} download mp3`,
-    `تطبيقات تشغيل ${q}`,
+    `${cleanName} مترجم للعربية كامل`,
+    `${cleanName} مدبلج بالعربي`,
+    `${cleanName} English Subtitles 1080p`,
+    `تحميل ${cleanName} مترجم بدون نت`,
+    `قصة وتفاصيل ${cleanName} بالعربية`,
+    `${cleanName} Official Trailer & Review`,
   ];
 
   return {
@@ -561,6 +893,17 @@ export default function App() {
   const [videoPlaybackRate, setVideoPlaybackRate] = useState<number>(1);
   const videoPlayerRef = useRef<HTMLVideoElement | null>(null);
 
+  // ═══ تحسينات مشغل الفيديو والتنسيقات المدعومة (Sandbox & Formats) ═══
+  const [selectedVideoFormat, setSelectedVideoFormat] = useState<'mp4' | 'webm' | 'ogg'>('mp4');
+  const [isVideoBuffering, setIsVideoBuffering] = useState<boolean>(false);
+  const [videoLoadError, setVideoLoadError] = useState<string | null>(null);
+  const [videoFormatFallbackAttempted, setVideoFormatFallbackAttempted] = useState<boolean>(false);
+
+  // ═══ ميزة ترجمة الصفحة الفورية عبر قاموس أونلاين (Translate Page) ═══
+  const [targetLanguage, setTargetLanguage] = useState<string>('ar');
+  const [isTranslating, setIsTranslating] = useState<boolean>(false);
+  const [isTranslateBannerOpen, setIsTranslateBannerOpen] = useState<boolean>(false);
+
   // Free VPN الدائم
   const [vpnEnabled, setVpnEnabled] = useState<boolean>(() => {
     try {
@@ -627,6 +970,36 @@ export default function App() {
     return generateVerticalResults(currentQueryParsed.clean, currentQueryParsed.intents);
   }, [currentQueryParsed]);
 
+  // ═══ فرز نتائج البحث اللغوي ذو الأولوية (عربي أولاً ➔ إنجليزي ثانياً ➔ لغات أخرى) ═══
+  const [selectedLangFilter, setSelectedLangFilter] = useState<'all' | 'ar' | 'en' | 'orig'>('all');
+
+  const filteredVideos = useMemo(() => {
+    const list =
+      selectedLangFilter === 'all'
+        ? verticalData.videos
+        : verticalData.videos.filter((v) => v.langTier === selectedLangFilter);
+    const score = (t?: string) => (t === 'ar' ? 1 : t === 'en' ? 2 : 3);
+    return [...list].sort((a, b) => score(a.langTier) - score(b.langTier));
+  }, [verticalData.videos, selectedLangFilter]);
+
+  const filteredWebResults = useMemo(() => {
+    const list =
+      selectedLangFilter === 'all'
+        ? verticalData.webResults
+        : verticalData.webResults.filter((w) => w.langTier === selectedLangFilter);
+    const score = (t?: string) => (t === 'ar' ? 1 : t === 'en' ? 2 : 3);
+    return [...list].sort((a, b) => score(a.langTier) - score(b.langTier));
+  }, [verticalData.webResults, selectedLangFilter]);
+
+  const filteredDocuments = useMemo(() => {
+    const list =
+      selectedLangFilter === 'all'
+        ? verticalData.documents
+        : verticalData.documents.filter((d) => d.langTier === selectedLangFilter);
+    const score = (t?: string) => (t === 'ar' ? 1 : t === 'en' ? 2 : 3);
+    return [...list].sort((a, b) => score(a.langTier) - score(b.langTier));
+  }, [verticalData.documents, selectedLangFilter]);
+
   // مزامنة شريط العنوان
   useEffect(() => {
     setUrlInput(activeTab.url.replace(/^https?:\/\//, ''));
@@ -642,11 +1015,43 @@ export default function App() {
     } catch {}
   }, [vpnEnabled, dataSaver, databaseApproved, videoWatchHistory]);
 
-  // تشغيل وحفظ الفيديو أوفلاين
+  // دالة الترجمة الفورية لنصوص المتصفح باستخدام القاموس الأونلاين (Online Mock Dictionary)
+  const t = useCallback(
+    (text: string): string => {
+      if (!text || targetLanguage === 'ar') return text;
+      return translateTextOnline(text, targetLanguage);
+    },
+    [targetLanguage]
+  );
+
+  const handleLanguageChange = (langCode: string) => {
+    setIsTranslating(true);
+    setTimeout(() => {
+      setTargetLanguage(langCode);
+      setIsTranslating(false);
+      if (langCode === 'ar') {
+        showToast('تمت استعادة لغة الصفحة الأصلية (العربية) ↩️');
+      } else {
+        const langObj = SUPPORTED_LANGUAGES.find((l) => l.code === langCode);
+        showToast(`🌐 تمت ترجمة نصوص الصفحة إلى ${langObj?.nativeName || langCode} عبر القاموس الفوري`);
+      }
+    }, 120);
+  };
+
+  const handleRestoreOriginal = () => {
+    setTargetLanguage('ar');
+    showToast('تمت استعادة النص الأصلي للصفحة ↩️');
+  };
+
+  // تشغيل وحفظ الفيديو أوفلاين مع إعدادات التنسيق والـ Sandbox
   const handlePlayVideo = (vid: VideoItem) => {
     setCurrentPlayingVideo(vid);
     setIsVideoPlayerOpen(true);
     setVideoPlaybackRate(1);
+    setSelectedVideoFormat('mp4');
+    setVideoLoadError(null);
+    setIsVideoBuffering(false);
+    setVideoFormatFallbackAttempted(false);
 
     setVideoWatchHistory((prev) => {
       const exists = prev.find((v) => v.id === vid.id || v.streamUrl === vid.streamUrl);
@@ -670,6 +1075,24 @@ export default function App() {
     }
 
     showToast(`🎬 تم تشغيل وحفظ الفيديو في السجل للمشاهدة بدون إنترنت: ${vid.title.slice(0, 30)}...`);
+  };
+
+  // معالجة أخطاء تشغيل الفيديو والتبديل التلقائي إلى التنسيق البديل المدعوم
+  const handleVideoError = () => {
+    if (!videoFormatFallbackAttempted) {
+      setVideoFormatFallbackAttempted(true);
+      const nextFmt = selectedVideoFormat === 'mp4' ? 'webm' : selectedVideoFormat === 'webm' ? 'ogg' : 'mp4';
+      setSelectedVideoFormat(nextFmt);
+      setVideoLoadError(`⚠️ تعذر تشغيل تنسيق ${selectedVideoFormat.toUpperCase()} - جاري التبديل التلقائي إلى ${nextFmt.toUpperCase()}`);
+      setTimeout(() => {
+        if (videoPlayerRef.current) {
+          videoPlayerRef.current.load();
+          videoPlayerRef.current.play().catch(() => {});
+        }
+      }, 500);
+    } else {
+      setVideoLoadError('⚠️ تعذر تشغيل هذا التنسيق. يمكنك التبديل يدوياً إلى تنسيق آخر أو إعادة المحاولة.');
+    }
   };
 
   // الملاحة والتنقل
@@ -1027,6 +1450,23 @@ export default function App() {
           <Star className="w-4 h-4" />
         </button>
 
+        {/* زر ترجمة الصفحة عبر القاموس الفوري أونلاين */}
+        <button
+          type="button"
+          onClick={() => setIsTranslateBannerOpen((prev) => !prev)}
+          className={`p-2 rounded-full cursor-pointer transition relative ${
+            isTranslateBannerOpen || targetLanguage !== 'ar'
+              ? 'bg-blue-100 dark:bg-blue-900/60 text-blue-600 dark:text-blue-300 ring-2 ring-blue-400/40'
+              : 'text-[#5F6368] hover:bg-black/5 dark:hover:bg-white/10'
+          }`}
+          title="ترجمة الصفحة (Translate Page)"
+        >
+          <Languages className="w-4 h-4" />
+          {targetLanguage !== 'ar' && (
+            <span className="absolute top-1 right-1 w-2 h-2 rounded-full bg-blue-600 ring-1 ring-white animate-pulse" />
+          )}
+        </button>
+
         {/* قائمة الخيارات (3-dots) */}
         <div className="relative">
           <button
@@ -1043,6 +1483,22 @@ export default function App() {
               className="absolute left-0 mt-2 w-64 bg-white dark:bg-[#2B2D30] rounded-2xl shadow-xl border border-gray-200 dark:border-gray-700 py-2 z-50 text-xs"
               onClick={() => setIsMenuOpen(false)}
             >
+              <button
+                type="button"
+                onClick={() => {
+                  setIsTranslateBannerOpen(true);
+                  setIsMenuOpen(false);
+                }}
+                className="w-full px-4 py-2 hover:bg-gray-100 dark:hover:bg-white/5 flex items-center justify-between text-right text-blue-600 font-semibold"
+              >
+                <span className="flex items-center gap-2">
+                  <Languages className="w-3.5 h-3.5" />
+                  <span>ترجمة الصفحة (Translate Page)</span>
+                </span>
+                <span className="text-[10px] bg-blue-100 dark:bg-blue-900/40 px-1.5 py-0.5 rounded text-blue-700 dark:text-blue-300 font-bold">
+                  {SUPPORTED_LANGUAGES.find((l) => l.code === targetLanguage)?.nativeName || 'العربية'}
+                </span>
+              </button>
               <button
                 type="button"
                 onClick={() => createNewTab('https://www.google.com/search?q=songs')}
@@ -1089,6 +1545,87 @@ export default function App() {
           )}
         </div>
       </div>
+
+      {/* ═══════════════════════════════════════════════════════════════
+          شريط ترجمة الصفحة الفوري عبر القاموس الأونلاين (Translate Banner)
+      ═══════════════════════════════════════════════════════════════ */}
+      {isTranslateBannerOpen && (
+        <div className="bg-[#E8F0FE] dark:bg-[#1E293B] border-b border-[#D2E3FC] dark:border-[#334155] px-4 py-2 flex flex-wrap items-center justify-between gap-3 text-xs transition z-20 shadow-xs">
+          <div className="flex items-center gap-2.5">
+            <div className="w-7 h-7 rounded-lg bg-blue-600 text-white flex items-center justify-center shadow-xs shrink-0">
+              <Languages className="w-4 h-4" />
+            </div>
+            <div>
+              <div className="flex items-center gap-2">
+                <span className="font-bold text-gray-900 dark:text-white">
+                  ترجمة الصفحة (Translate Page)
+                </span>
+                <span className="px-2 py-0.5 rounded-full bg-emerald-100 dark:bg-emerald-950/60 text-emerald-700 dark:text-emerald-300 font-bold text-[10px] flex items-center gap-1">
+                  <span className="w-1.5 h-1.5 rounded-full bg-emerald-500 animate-pulse" />
+                  قاموس فوري أونلاين متصل
+                </span>
+              </div>
+              <p className="text-[11px] text-gray-500 dark:text-gray-400 hidden sm:block">
+                استبدال فوري للنصوص والعناوين والمحتوى باللغة التي تختارها
+              </p>
+            </div>
+          </div>
+
+          <div className="flex items-center flex-wrap gap-2">
+            <div className="flex items-center gap-1 bg-white dark:bg-[#0F172A] border border-gray-200 dark:border-gray-700 rounded-lg p-1 shadow-2xs">
+              <span className="text-[11px] text-gray-400 px-1">اللغة:</span>
+              <select
+                value={targetLanguage}
+                onChange={(e) => handleLanguageChange(e.target.value)}
+                disabled={isTranslating}
+                className="bg-transparent text-xs font-bold text-gray-800 dark:text-gray-200 focus:outline-none cursor-pointer pr-1 pl-2 py-0.5"
+              >
+                {SUPPORTED_LANGUAGES.map((lang) => (
+                  <option
+                    key={lang.code}
+                    value={lang.code}
+                    className="bg-white dark:bg-gray-800 text-gray-900 dark:text-white"
+                  >
+                    {lang.flag} {lang.nativeName} ({lang.name})
+                  </option>
+                ))}
+              </select>
+            </div>
+
+            {isTranslating ? (
+              <div className="flex items-center gap-1.5 px-3 py-1.5 bg-blue-100 dark:bg-blue-900/40 text-blue-700 dark:text-blue-300 rounded-lg text-xs font-semibold">
+                <RotateCw className="w-3.5 h-3.5 animate-spin" />
+                <span>جاري استبدال النصوص...</span>
+              </div>
+            ) : targetLanguage !== 'ar' ? (
+              <button
+                type="button"
+                onClick={handleRestoreOriginal}
+                className="px-3 py-1.5 rounded-lg border border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-800 hover:bg-gray-50 dark:hover:bg-gray-700 text-gray-700 dark:text-gray-200 font-semibold cursor-pointer transition shadow-2xs"
+              >
+                عرض النص الأصلي (Original)
+              </button>
+            ) : (
+              <button
+                type="button"
+                onClick={() => handleLanguageChange('en')}
+                className="px-3 py-1.5 rounded-lg bg-blue-600 hover:bg-blue-700 text-white font-semibold cursor-pointer transition shadow-2xs"
+              >
+                ترجمة إلى الإنجليزية
+              </button>
+            )}
+
+            <button
+              type="button"
+              onClick={() => setIsTranslateBannerOpen(false)}
+              className="p-1 rounded-full hover:bg-gray-200 dark:hover:bg-gray-700 text-gray-500 cursor-pointer"
+              title="إغلاق شريط الترجمة"
+            >
+              <X className="w-4 h-4" />
+            </button>
+          </div>
+        </div>
+      )}
 
       {/* ═══════════════════════════════════════════════════════════════
           3. مساحة العرض الرئيسية: محرك بحث جوجل المتكامل أو صفحة الويب
@@ -1195,15 +1732,15 @@ export default function App() {
             {/* شريط التصنيفات وأوضاع البحث (Search Modes Carousel) */}
             <div className="border-b border-gray-200 dark:border-gray-800 flex items-center gap-1 overflow-x-auto no-scrollbar text-xs">
               {[
-                { id: 'all', label: 'الكل', icon: <Search className="w-3.5 h-3.5" /> },
-                { id: 'ai', label: 'وضع AI', icon: <Sparkles className="w-3.5 h-3.5 text-purple-600" />, badge: 'توليدي' },
-                { id: 'videos', label: 'فيديوهات', icon: <Film className="w-3.5 h-3.5 text-rose-500" /> },
-                { id: 'images', label: 'صور', icon: <Image className="w-3.5 h-3.5 text-blue-500" /> },
-                { id: 'shorts', label: 'فيديوهات قصيرة', icon: <Play className="w-3.5 h-3.5 text-red-500" /> },
-                { id: 'news', label: 'أخبار', icon: <Globe className="w-3.5 h-3.5 text-emerald-500" /> },
-                { id: 'apps', label: 'تطبيقات', icon: <Smartphone className="w-3.5 h-3.5 text-indigo-500" /> },
-                { id: 'books', label: 'كتب', icon: <BookOpen className="w-3.5 h-3.5 text-amber-500" /> },
-                { id: 'pdf', label: 'ملفات PDF', icon: <FileText className="w-3.5 h-3.5 text-gray-500" /> },
+                { id: 'all', label: t('الكل'), icon: <Search className="w-3.5 h-3.5" /> },
+                { id: 'ai', label: t('وضع AI'), icon: <Sparkles className="w-3.5 h-3.5 text-purple-600" />, badge: t('توليدي') },
+                { id: 'videos', label: t('فيديوهات'), icon: <Film className="w-3.5 h-3.5 text-rose-500" /> },
+                { id: 'images', label: t('صور'), icon: <Image className="w-3.5 h-3.5 text-blue-500" /> },
+                { id: 'shorts', label: t('فيديوهات قصيرة'), icon: <Play className="w-3.5 h-3.5 text-red-500" /> },
+                { id: 'news', label: t('أخبار'), icon: <Globe className="w-3.5 h-3.5 text-emerald-500" /> },
+                { id: 'apps', label: t('تطبيقات'), icon: <Smartphone className="w-3.5 h-3.5 text-indigo-500" /> },
+                { id: 'books', label: t('كتب وأبحاث'), icon: <BookOpen className="w-3.5 h-3.5 text-amber-500" /> },
+                { id: 'pdf', label: t('ملفات PDF'), icon: <FileText className="w-3.5 h-3.5 text-gray-500" /> },
               ].map((m) => (
                 <button
                   key={m.id}
@@ -1227,6 +1764,61 @@ export default function App() {
             </div>
 
             {/* ═══════════════════════════════════════════════════════════════
+                شريط نظام الترتيب اللغوي المترجم (عربي أولاً ➔ إنجليزي ثانياً ➔ لغات أخرى)
+            ═══════════════════════════════════════════════════════════════ */}
+            <div className="p-3.5 bg-gradient-to-r from-emerald-50 via-blue-50 to-purple-50 dark:from-emerald-950/40 dark:via-blue-950/40 dark:to-purple-950/40 border border-emerald-200 dark:border-emerald-800/60 rounded-2xl flex flex-wrap items-center justify-between gap-3 text-xs shadow-xs">
+              <div className="flex items-center gap-2.5">
+                <span className="text-xl shrink-0">🎯</span>
+                <div>
+                  <div className="flex items-center gap-1.5 flex-wrap">
+                    <span className="font-bold text-gray-900 dark:text-white">
+                      نظام الترتيب والترجمة ذو الأولوية:
+                    </span>
+                    <span className="px-2 py-0.5 rounded-full bg-emerald-600 text-white font-bold text-[10px] flex items-center gap-1 shadow-2xs">
+                      <span>1. مترجم للعربية أولاً</span>
+                      <span>🇸🇦</span>
+                    </span>
+                    <span className="text-gray-400 font-bold">➔</span>
+                    <span className="px-2 py-0.5 rounded-full bg-blue-600 text-white font-bold text-[10px] flex items-center gap-1 shadow-2xs">
+                      <span>2. ثم بالإنجليزية</span>
+                      <span>🇺🇸</span>
+                    </span>
+                    <span className="text-gray-400 font-bold">➔</span>
+                    <span className="px-2 py-0.5 rounded-full bg-purple-600 text-white font-bold text-[10px] flex items-center gap-1 shadow-2xs">
+                      <span>3. ثم لغات أخرى</span>
+                      <span>🌐</span>
+                    </span>
+                  </div>
+                  <p className="text-[11px] text-gray-600 dark:text-gray-300 mt-1">
+                    يتم جلب وعرض نتائج الأفلام والأغاني والمحتوى <b>المترجمة للعربية أولاً</b>، وإذا لم تتوفر يعرض <b>الترجمة الإنجليزية</b>، ثم <b>اللغات الأخرى</b> بالترتيب التتابعي.
+                  </p>
+                </div>
+              </div>
+
+              <div className="flex items-center gap-1 bg-white/80 dark:bg-black/40 p-1 rounded-xl border border-gray-200/70 dark:border-gray-700/70 shadow-2xs">
+                {[
+                  { id: 'all', label: 'الكل بالترتيب الذكي (عربي ➔ إنجليزي ➔ أخرى)' },
+                  { id: 'ar', label: 'مترجم للعربية فقط 🇸🇦' },
+                  { id: 'en', label: 'بالإنجليزية فقط 🇺🇸' },
+                  { id: 'orig', label: 'لغات أخرى 🌐' },
+                ].map((flt) => (
+                  <button
+                    key={flt.id}
+                    type="button"
+                    onClick={() => setSelectedLangFilter(flt.id as any)}
+                    className={`px-2.5 py-1 rounded-lg text-[11px] font-bold transition cursor-pointer ${
+                      selectedLangFilter === flt.id
+                        ? 'bg-emerald-600 text-white shadow-xs'
+                        : 'text-gray-600 dark:text-gray-300 hover:bg-black/5 dark:hover:bg-white/10'
+                    }`}
+                  >
+                    {flt.label}
+                  </button>
+                ))}
+              </div>
+            </div>
+
+            {/* ═══════════════════════════════════════════════════════════════
                 الآلية البرمجية 4 و 5: الترتيب والعرض الديناميكي المتكيف مع النية
             ═══════════════════════════════════════════════════════════════ */}
 
@@ -1239,24 +1831,24 @@ export default function App() {
                       <Sparkles className="w-3.5 h-3.5" />
                     </div>
                     <span className="font-bold text-xs text-purple-900 dark:text-purple-300">
-                      نظرة عامة مدعومة بنماذج الذكاء الاصطناعي (AI Overview)
+                      {t('نظرة عامة مدعومة بنماذج الذكاء الاصطناعي (AI Overview)')}
                     </span>
                   </div>
                   <button
                     type="button"
                     onClick={() => setIsAiOverviewExpanded((p) => !p)}
-                    className="text-[11px] text-purple-700 dark:text-purple-400 font-bold"
+                    className="text-[11px] text-purple-700 dark:text-purple-400 font-bold cursor-pointer"
                   >
-                    {isAiOverviewExpanded ? 'تصغير' : 'عرض المزيد'}
+                    {isAiOverviewExpanded ? t('تصغير') : t('عرض المزيد')}
                   </button>
                 </div>
 
                 {isAiOverviewExpanded && (
                   <div className="text-xs text-gray-700 dark:text-gray-300 space-y-2 leading-relaxed">
-                    <p>{verticalData.aiOverview.summary}</p>
+                    <p>{t(verticalData.aiOverview.summary)}</p>
                     <ul className="list-disc list-inside space-y-1 text-[11px] text-gray-600 dark:text-gray-400">
                       {verticalData.aiOverview.keyPoints.map((pt, i) => (
-                        <li key={i}>{pt}</li>
+                        <li key={i}>{t(pt)}</li>
                       ))}
                     </ul>
                   </div>
@@ -1273,16 +1865,16 @@ export default function App() {
                   <div className="flex items-center justify-between">
                     <div className="flex items-center gap-2">
                       <Film className="w-4 h-4 text-rose-600" />
-                      <h3 className="font-bold text-sm text-gray-900 dark:text-white">فيديوهات</h3>
+                      <h3 className="font-bold text-sm text-gray-900 dark:text-white">{t('فيديوهات')}</h3>
                     </div>
                     <span className="text-[10px] text-emerald-600 font-bold flex items-center gap-1">
                       <CheckCircle2 className="w-3 h-3" />
-                      مشغل مدمج + حفظ تلقائي بدون نت
+                      {t('مشغل مدمج + حفظ تلقائي بدون نت')}
                     </span>
                   </div>
 
                   <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3">
-                    {verticalData.videos.slice(0, videosVisibleCount).map((vid) => (
+                    {filteredVideos.slice(0, videosVisibleCount).map((vid) => (
                       <div
                         key={vid.id}
                         onClick={() => handlePlayVideo(vid)}
@@ -1302,34 +1894,52 @@ export default function App() {
                           <span className="absolute bottom-1.5 left-1.5 px-1.5 py-0.5 rounded bg-black/80 text-white font-mono text-[9px]">
                             {vid.duration}
                           </span>
+
+                          {/* شارة أولوية اللغة */}
+                          {vid.langBadge && (
+                            <span
+                              className={`absolute top-1.5 right-1.5 px-2 py-0.5 rounded-full font-bold text-[9px] shadow-sm flex items-center gap-1 ${
+                                vid.langTier === 'ar'
+                                  ? 'bg-emerald-600 text-white'
+                                  : vid.langTier === 'en'
+                                  ? 'bg-blue-600 text-white'
+                                  : 'bg-purple-600 text-white'
+                              }`}
+                            >
+                              {vid.langTier === 'ar' && (
+                                <span className="w-1.5 h-1.5 rounded-full bg-white animate-pulse" />
+                              )}
+                              {vid.langBadge}
+                            </span>
+                          )}
                         </div>
 
                         <div>
                           <h4 className="font-bold text-xs text-gray-900 dark:text-white line-clamp-2 group-hover:text-blue-600 transition">
-                            {vid.title}
+                            {t(vid.title)}
                           </h4>
-                          <p className="text-[11px] text-gray-500 mt-1">{vid.channel}</p>
+                          <p className="text-[11px] text-gray-500 mt-1">{t(vid.channel)}</p>
                         </div>
 
                         <div className="flex items-center justify-between text-[10px] text-gray-400 mt-2 pt-2 border-t border-gray-100 dark:border-gray-800">
-                          <span>{vid.views}</span>
-                          <span className="text-emerald-600 font-bold">جاهز للمشاهدة 🎬</span>
+                          <span>{t(vid.views)}</span>
+                          <span className="text-emerald-600 font-bold">{t('جاهز للمشاهدة 🎬')}</span>
                         </div>
                       </div>
                     ))}
                   </div>
 
-                  {/* الآلية البرمجية 6: التحميل التدريجي للفيديوهات */}
-                  {videosVisibleCount < verticalData.videos.length && (
+                  {/* التحميل التدريجي للفيديوهات */}
+                  {videosVisibleCount < filteredVideos.length && (
                     <button
                       type="button"
                       onClick={() => {
-                        setVideosVisibleCount((c) => Math.min(verticalData.videos.length, c + 3));
+                        setVideosVisibleCount((c) => Math.min(filteredVideos.length, c + 3));
                         showToast('تم تحميل المزيد من الفيديوهات');
                       }}
                       className="w-full py-2.5 rounded-xl border border-gray-200 dark:border-gray-700 bg-gray-50 dark:bg-white/5 hover:bg-gray-100 text-xs font-bold text-blue-600 transition cursor-pointer"
                     >
-                      المزيد من الفيديوهات ⬇️
+                      {t('المزيد من الفيديوهات ⬇️')}
                     </button>
                   )}
                 </div>
@@ -1343,10 +1953,10 @@ export default function App() {
                     <div className="flex items-center gap-2">
                       <Smartphone className="w-4 h-4 text-indigo-600" />
                       <h3 className="font-bold text-sm text-gray-900 dark:text-white">
-                        تطبيقات ذات صلة (Google Play Store)
+                        {t('تطبيقات ذات صلة (Google Play Store)')}
                       </h3>
                     </div>
-                    <span className="text-[11px] text-gray-400">تحميل مباشر وتثبيت</span>
+                    <span className="text-[11px] text-gray-400">{t('تحميل مباشر وتثبيت')}</span>
                   </div>
 
                   <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3">
@@ -1362,10 +1972,17 @@ export default function App() {
                             className="w-11 h-11 rounded-xl object-cover shrink-0"
                           />
                           <div className="truncate">
-                            <h4 className="font-bold text-xs truncate text-gray-900 dark:text-white">
-                              {app.name}
-                            </h4>
-                            <p className="text-[10px] text-gray-400">{app.category}</p>
+                            <div className="flex items-center gap-1.5">
+                              <h4 className="font-bold text-xs truncate text-gray-900 dark:text-white">
+                                {t(app.name)}
+                              </h4>
+                              {app.langBadge && (
+                                <span className="px-1.5 py-0.2 rounded text-[9px] font-bold bg-emerald-100 text-emerald-800 dark:bg-emerald-950 dark:text-emerald-300">
+                                  {app.langBadge}
+                                </span>
+                              )}
+                            </div>
+                            <p className="text-[10px] text-gray-400">{t(app.category)}</p>
                             <div className="flex items-center gap-1 text-[10px] text-amber-500 font-bold mt-0.5">
                               <span>⭐ {app.rating}</span>
                               <span className="text-gray-400 font-normal">({app.reviewsCount})</span>
@@ -1378,7 +1995,7 @@ export default function App() {
                           onClick={() => showToast(`تم تثبيت ${app.name} عبر AnwerBrowser بنجاح`)}
                           className="px-3 py-1.5 rounded-full bg-blue-600 hover:bg-blue-700 text-white font-bold text-xs shrink-0 cursor-pointer"
                         >
-                          تثبيت
+                          {t('تثبيت')}
                         </button>
                       </div>
                     ))}
@@ -1391,9 +2008,9 @@ export default function App() {
                         setAppsVisibleCount((c) => Math.min(verticalData.apps.length, c + 2));
                         showToast('تم تحميل المزيد من التطبيقات');
                       }}
-                      className="w-full py-2 text-center text-xs font-bold text-blue-600 hover:underline"
+                      className="w-full py-2 text-center text-xs font-bold text-blue-600 hover:underline cursor-pointer"
                     >
-                      المزيد من التطبيقات ⬇️
+                      {t('المزيد من التطبيقات ⬇️')}
                     </button>
                   )}
                 </div>
@@ -1409,44 +2026,59 @@ export default function App() {
                     <div className="flex items-center gap-2">
                       <FileText className="w-4 h-4 text-amber-600" />
                       <h3 className="font-bold text-sm text-gray-900 dark:text-white">
-                        الكتب والأبحاث والمستندات (PDF / Books)
+                        {t('الكتب والأبحاث والمستندات (PDF / Books)')}
                       </h3>
                     </div>
                     <span className="text-[10px] text-amber-700 dark:text-amber-300 font-bold">
-                      تحميل مباشر مجاني
+                      {t('تحميل مباشر مجاني')}
                     </span>
                   </div>
 
                   <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-                    {verticalData.documents.map((doc) => (
+                    {filteredDocuments.map((doc) => (
                       <div
                         key={doc.id}
                         className="p-3.5 rounded-xl border border-amber-200 dark:border-amber-800 bg-white dark:bg-[#202124] flex flex-col justify-between"
                       >
                         <div>
-                          <div className="flex items-center gap-1.5 mb-1">
-                            <span className="px-1.5 py-0.5 rounded bg-red-600 text-white font-mono text-[9px] font-bold">
-                              {doc.format}
-                            </span>
-                            <span className="text-[10px] text-gray-400">{doc.size}</span>
+                          <div className="flex items-center justify-between gap-1.5 mb-1.5">
+                            <div className="flex items-center gap-1.5">
+                              <span className="px-1.5 py-0.5 rounded bg-red-600 text-white font-mono text-[9px] font-bold">
+                                {doc.format}
+                              </span>
+                              <span className="text-[10px] text-gray-400">{doc.size}</span>
+                            </div>
+                            {doc.langBadge && (
+                              <span
+                                className={`px-2 py-0.5 rounded-full font-bold text-[9px] ${
+                                  doc.langTier === 'ar'
+                                    ? 'bg-emerald-100 text-emerald-800 dark:bg-emerald-950 dark:text-emerald-300'
+                                    : doc.langTier === 'en'
+                                    ? 'bg-blue-100 text-blue-800 dark:bg-blue-950 dark:text-blue-300'
+                                    : 'bg-purple-100 text-purple-800 dark:bg-purple-950 dark:text-purple-300'
+                                }`}
+                              >
+                                {doc.langBadge}
+                              </span>
+                            )}
                           </div>
                           <h4 className="font-bold text-xs text-gray-900 dark:text-white mb-1">
-                            {doc.title}
+                            {t(doc.title)}
                           </h4>
                           <p className="text-[11px] text-gray-600 dark:text-gray-400 line-clamp-2">
-                            {doc.snippet}
+                            {t(doc.snippet)}
                           </p>
                         </div>
 
                         <div className="flex items-center justify-between mt-3 pt-2 border-t border-gray-100 dark:border-gray-800">
-                          <span className="text-[10px] text-gray-400">{doc.author}</span>
+                          <span className="text-[10px] text-gray-400">{t(doc.author)}</span>
                           <button
                             type="button"
                             onClick={() => showToast(`تم بدء تنزيل ${doc.title}`)}
-                            className="px-3 py-1 rounded-lg bg-amber-600 hover:bg-amber-700 text-white font-bold text-xs flex items-center gap-1"
+                            className="px-3 py-1 rounded-lg bg-amber-600 hover:bg-amber-700 text-white font-bold text-xs flex items-center gap-1 cursor-pointer"
                           >
                             <Download className="w-3 h-3" />
-                            <span>تحميل</span>
+                            <span>{t('تحميل')}</span>
                           </button>
                         </div>
                       </div>
@@ -1458,47 +2090,63 @@ export default function App() {
             {/* هـ) نتائج الويب العضوية (Organic Web Results) */}
             {(selectedVertical === 'all' || selectedVertical === 'news') && (
               <div className="space-y-4 pt-2">
-                <h3 className="font-bold text-sm text-gray-900 dark:text-white">نتائج الويب</h3>
+                <h3 className="font-bold text-sm text-gray-900 dark:text-white">{t('نتائج الويب')}</h3>
 
                 <div className="space-y-3">
-                  {verticalData.webResults.slice(0, webVisibleCount).map((item) => (
+                  {filteredWebResults.slice(0, webVisibleCount).map((item) => (
                     <div
                       key={item.id}
                       onClick={() => navigateCurrentTab(item.url)}
                       className="p-3.5 rounded-2xl border border-gray-100 dark:border-gray-800 hover:border-blue-400 dark:hover:border-blue-600 transition cursor-pointer group bg-white dark:bg-[#2B2D30]"
                     >
-                      <div className="flex items-center gap-2 text-[11px] text-gray-500 mb-1">
-                        <div className="w-4 h-4 rounded-full bg-gray-200 dark:bg-gray-700 flex items-center justify-center font-bold text-[9px]">
-                          🌐
+                      <div className="flex items-center justify-between mb-1">
+                        <div className="flex items-center gap-2 text-[11px] text-gray-500">
+                          <div className="w-4 h-4 rounded-full bg-gray-200 dark:bg-gray-700 flex items-center justify-center font-bold text-[9px]">
+                            🌐
+                          </div>
+                          <span className="font-mono text-gray-700 dark:text-gray-300 font-semibold">
+                            {item.domain}
+                          </span>
+                          <span>›</span>
+                          <span className="text-gray-400 truncate">{item.path}</span>
                         </div>
-                        <span className="font-mono text-gray-700 dark:text-gray-300 font-semibold">
-                          {item.domain}
-                        </span>
-                        <span>›</span>
-                        <span className="text-gray-400 truncate">{item.path}</span>
+
+                        {item.langBadge && (
+                          <span
+                            className={`px-2 py-0.5 rounded-full font-bold text-[9px] ${
+                              item.langTier === 'ar'
+                                ? 'bg-emerald-100 text-emerald-800 dark:bg-emerald-950 dark:text-emerald-300 border border-emerald-300 dark:border-emerald-700'
+                                : item.langTier === 'en'
+                                ? 'bg-blue-100 text-blue-800 dark:bg-blue-950 dark:text-blue-300 border border-blue-300 dark:border-blue-700'
+                                : 'bg-purple-100 text-purple-800 dark:bg-purple-950 dark:text-purple-300 border border-purple-300 dark:border-purple-700'
+                            }`}
+                          >
+                            {item.langBadge}
+                          </span>
+                        )}
                       </div>
 
                       <h4 className="text-sm font-bold text-blue-700 dark:text-blue-400 group-hover:underline mb-1">
-                        {item.title}
+                        {t(item.title)}
                       </h4>
 
                       <p className="text-xs text-gray-600 dark:text-gray-400 leading-relaxed">
-                        {item.snippet}
+                        {t(item.snippet)}
                       </p>
                     </div>
                   ))}
                 </div>
 
-                {webVisibleCount < verticalData.webResults.length && (
+                {webVisibleCount < filteredWebResults.length && (
                   <button
                     type="button"
                     onClick={() => {
-                      setWebVisibleCount((c) => Math.min(verticalData.webResults.length, c + 3));
+                      setWebVisibleCount((c) => Math.min(filteredWebResults.length, c + 3));
                       showToast('تم تحميل المزيد من نتائج الويب');
                     }}
-                    className="w-full py-2.5 rounded-xl border border-gray-200 dark:border-gray-700 bg-gray-50 dark:bg-white/5 hover:bg-gray-100 text-xs font-bold text-blue-600 transition"
+                    className="w-full py-2.5 rounded-xl border border-gray-200 dark:border-gray-700 bg-gray-50 dark:bg-white/5 hover:bg-gray-100 text-xs font-bold text-blue-600 transition cursor-pointer"
                   >
-                    المزيد من نتائج الويب ⬇️
+                    {t('المزيد من نتائج الويب ⬇️')}
                   </button>
                 )}
               </div>
@@ -1507,7 +2155,7 @@ export default function App() {
             {/* و) قسم "تم البحث أيضًا عن" (Related Searches) */}
             <div className="p-4 rounded-2xl bg-gray-50 dark:bg-white/5 border border-gray-200 dark:border-gray-700 space-y-2.5">
               <h3 className="font-bold text-xs text-gray-700 dark:text-gray-300">
-                تم البحث أيضًا عن (Related Searches)
+                {t('تم البحث أيضًا عن (Related Searches)')}
               </h3>
               <div className="flex flex-wrap gap-2">
                 {verticalData.relatedSearches.map((term, i) => (
@@ -1518,7 +2166,7 @@ export default function App() {
                     className="px-3.5 py-1.5 rounded-full bg-white dark:bg-[#2B2D30] border border-gray-200 dark:border-gray-700 text-xs font-semibold hover:border-blue-500 hover:text-blue-600 transition cursor-pointer flex items-center gap-1.5 shadow-2xs"
                   >
                     <Search className="w-3 h-3 text-gray-400" />
-                    <span>{term}</span>
+                    <span>{t(term)}</span>
                   </button>
                 ))}
               </div>
@@ -1536,7 +2184,9 @@ export default function App() {
               title={activeTab.title}
               src={activeTab.url}
               className="w-full h-full border-none"
-              sandbox="allow-same-origin allow-scripts allow-forms allow-popups allow-downloads allow-modals"
+              sandbox="allow-scripts allow-same-origin allow-forms allow-popups allow-modals allow-presentation allow-downloads allow-pointer-lock allow-orientation-lock"
+              allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture; web-share; fullscreen"
+              allowFullScreen
               style={{
                 transform: `scale(${zoomLevel / 100})`,
                 transformOrigin: 'top right',
@@ -1554,87 +2204,209 @@ export default function App() {
       </main>
 
       {/* ═══════════════════════════════════════════════════════════════
-          مشغل الفيديو المدمج مع الحفظ التلقائي للمشاهدة بدون إنترنت
+          مشغل الفيديو المدمج المتطور مع إعدادات Sandbox وتنسيقات الملفات
       ═══════════════════════════════════════════════════════════════ */}
-      {isVideoPlayerOpen && currentPlayingVideo && (
-        <div
-          className="fixed inset-0 z-50 bg-black/85 backdrop-blur-xs flex items-center justify-center p-3 sm:p-6"
-          onClick={() => setIsVideoPlayerOpen(false)}
-        >
+      {isVideoPlayerOpen && currentPlayingVideo && (() => {
+        const embedInfo = getEmbedVideoInfo(currentPlayingVideo.streamUrl);
+        const sources = getVideoSourceUrls(currentPlayingVideo.streamUrl);
+
+        return (
           <div
-            onClick={(e) => e.stopPropagation()}
-            className="w-full max-w-3xl bg-[#18191A] rounded-2xl shadow-2xl border border-gray-800 overflow-hidden flex flex-col text-white"
+            className="fixed inset-0 z-50 bg-black/85 backdrop-blur-xs flex items-center justify-center p-3 sm:p-6"
+            onClick={() => setIsVideoPlayerOpen(false)}
           >
-            <div className="p-3.5 bg-black/60 border-b border-gray-800 flex items-center justify-between">
-              <div className="flex items-center gap-2 truncate pl-2">
-                <Film className="w-4 h-4 text-rose-500 shrink-0" />
-                <h3 className="text-xs sm:text-sm font-bold truncate">
-                  {currentPlayingVideo.title}
-                </h3>
-              </div>
-              <button
-                type="button"
-                onClick={() => setIsVideoPlayerOpen(false)}
-                className="p-1 rounded-full hover:bg-white/10 text-gray-400 hover:text-white"
-              >
-                <X className="w-5 h-5" />
-              </button>
-            </div>
-
-            <div className="relative aspect-video bg-black flex items-center justify-center">
-              <video
-                ref={videoPlayerRef}
-                src={currentPlayingVideo.streamUrl}
-                poster={currentPlayingVideo.thumbnail}
-                controls
-                autoPlay
-                className="w-full h-full object-contain"
-              />
-            </div>
-
-            <div className="p-4 bg-[#242526] flex flex-wrap items-center justify-between gap-3 text-xs">
-              <div className="flex items-center gap-2">
-                <span className="w-2.5 h-2.5 rounded-full bg-emerald-500 animate-pulse" />
-                <span className="text-emerald-400 font-bold">محفوظ في السجل للمشاهدة بدون إنترنت 💾</span>
-                <span className="text-gray-400 text-[11px] font-mono">({currentPlayingVideo.duration})</span>
-              </div>
-
-              <div className="flex items-center gap-1 text-[11px]">
-                <span className="text-gray-400 ml-1">السرعة:</span>
-                {[0.75, 1, 1.25, 1.5, 2].map((rate) => (
+            <div
+              onClick={(e) => e.stopPropagation()}
+              className="w-full max-w-3xl bg-[#18191A] rounded-2xl shadow-2xl border border-gray-800 overflow-hidden flex flex-col text-white"
+            >
+              {/* شريط عنوان المشغل */}
+              <div className="p-3.5 bg-black/60 border-b border-gray-800 flex items-center justify-between">
+                <div className="flex items-center gap-2 truncate pl-2">
+                  <Film className="w-4 h-4 text-rose-500 shrink-0" />
+                  <h3 className="text-xs sm:text-sm font-bold truncate">
+                    {t(currentPlayingVideo.title)}
+                  </h3>
+                </div>
+                <div className="flex items-center gap-2">
+                  <span className="hidden sm:inline-block px-2 py-0.5 rounded text-[10px] bg-rose-950/80 text-rose-300 border border-rose-800 font-mono">
+                    {embedInfo.isEmbed ? 'IFRAME EMBED' : `${selectedVideoFormat.toUpperCase()} (H.264/AAC)`}
+                  </span>
                   <button
-                    key={rate}
                     type="button"
-                    onClick={() => {
-                      setVideoPlaybackRate(rate);
-                      if (videoPlayerRef.current) videoPlayerRef.current.playbackRate = rate;
-                    }}
-                    className={`px-2 py-0.5 rounded font-mono font-bold transition ${
-                      videoPlaybackRate === rate
-                        ? 'bg-rose-600 text-white'
-                        : 'bg-white/10 text-gray-300 hover:bg-white/20'
-                    }`}
+                    onClick={() => setIsVideoPlayerOpen(false)}
+                    className="p-1 rounded-full hover:bg-white/10 text-gray-400 hover:text-white cursor-pointer"
                   >
-                    {rate}x
+                    <X className="w-5 h-5" />
                   </button>
-                ))}
+                </div>
               </div>
 
-              <button
-                type="button"
-                onClick={() => {
-                  setIsOfflineVideosDrawerOpen(true);
-                  setIsVideoPlayerOpen(false);
-                }}
-                className="px-3 py-1.5 rounded-lg bg-white/10 hover:bg-white/20 text-xs font-semibold flex items-center gap-1.5"
-              >
-                <Film className="w-3.5 h-3.5 text-rose-400" />
-                <span>فتح مكتبة الفيديوهات</span>
-              </button>
+              {/* مساحة عرض المشغل المدمج */}
+              <div className="relative aspect-video bg-black flex items-center justify-center overflow-hidden">
+                {embedInfo.isEmbed ? (
+                  /* مشغل الفيديو التضميني مع تفعيل Sandbox والصلاحيات الكاملة */
+                  <iframe
+                    src={embedInfo.embedUrl}
+                    title={currentPlayingVideo.title}
+                    className="w-full h-full border-0"
+                    sandbox="allow-scripts allow-same-origin allow-forms allow-popups allow-modals allow-presentation allow-downloads allow-pointer-lock allow-orientation-lock"
+                    allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture; web-share; fullscreen"
+                    allowFullScreen
+                  />
+                ) : (
+                  /* عنصر الفيديو المباشر مع دعم التنسيقات المتعددة ومعالجة الأخطاء */
+                  <video
+                    ref={videoPlayerRef}
+                    key={`${currentPlayingVideo.id}_${selectedVideoFormat}`}
+                    poster={currentPlayingVideo.thumbnail}
+                    controls
+                    autoPlay
+                    playsInline
+                    crossOrigin="anonymous"
+                    preload="auto"
+                    className="w-full h-full object-contain"
+                    onWaiting={() => setIsVideoBuffering(true)}
+                    onPlaying={() => {
+                      setIsVideoBuffering(false);
+                      setVideoLoadError(null);
+                    }}
+                    onCanPlay={() => setIsVideoBuffering(false)}
+                    onError={handleVideoError}
+                  >
+                    {selectedVideoFormat === 'mp4' && (
+                      <source
+                        src={sources.mp4Url}
+                        type="video/mp4; codecs='avc1.42E01E, mp4a.40.2'"
+                      />
+                    )}
+                    {selectedVideoFormat === 'webm' && (
+                      <source
+                        src={sources.webmUrl}
+                        type="video/webm; codecs='vp8, vorbis'"
+                      />
+                    )}
+                    {selectedVideoFormat === 'ogg' && (
+                      <source
+                        src={sources.oggUrl}
+                        type="video/ogg; codecs='theora, vorbis'"
+                      />
+                    )}
+                    {/* مصادر بديلة للمتانة والتوافق الشامل */}
+                    <source src={sources.mp4Url} type="video/mp4" />
+                    <source src={sources.webmUrl} type="video/webm" />
+                    <source src={sources.oggUrl} type="video/ogg" />
+                    <p className="text-xs text-white p-4">
+                      متصفحك لا يدعم عنصر الفيديو المباشر.
+                    </p>
+                  </video>
+                )}
+
+                {/* مؤشر التحميل والتخزين المؤقت */}
+                {isVideoBuffering && !embedInfo.isEmbed && (
+                  <div className="absolute inset-0 bg-black/40 flex items-center justify-center pointer-events-none">
+                    <div className="flex flex-col items-center gap-2 bg-black/70 px-4 py-3 rounded-xl border border-white/10">
+                      <RotateCw className="w-6 h-6 text-rose-500 animate-spin" />
+                      <span className="text-xs text-white font-semibold">جاري تحميل البث...</span>
+                    </div>
+                  </div>
+                )}
+
+                {/* تنبيه الخطأ والتبديل التلقائي للتنسيق */}
+                {videoLoadError && !embedInfo.isEmbed && (
+                  <div className="absolute bottom-4 left-4 right-4 bg-amber-950/90 border border-amber-600 text-amber-200 px-4 py-2.5 rounded-xl text-xs flex items-center justify-between shadow-xl backdrop-blur-xs">
+                    <div className="flex items-center gap-2">
+                      <AlertCircle className="w-4 h-4 text-amber-400 shrink-0" />
+                      <span>{videoLoadError}</span>
+                    </div>
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setSelectedVideoFormat((prev) => (prev === 'mp4' ? 'webm' : 'mp4'));
+                        setVideoLoadError(null);
+                      }}
+                      className="px-2.5 py-1 rounded bg-amber-600 hover:bg-amber-500 text-white font-bold text-[11px] shrink-0 cursor-pointer"
+                    >
+                      تبديل التنسيق
+                    </button>
+                  </div>
+                )}
+              </div>
+
+              {/* أدوات التحكم السفلية */}
+              <div className="p-4 bg-[#242526] flex flex-wrap items-center justify-between gap-3 text-xs border-t border-gray-800">
+                <div className="flex items-center gap-2">
+                  <span className="w-2.5 h-2.5 rounded-full bg-emerald-500 animate-pulse" />
+                  <span className="text-emerald-400 font-bold">
+                    {t('محفوظ في السجل للمشاهدة بدون إنترنت 💾')}
+                  </span>
+                  <span className="text-gray-400 text-[11px] font-mono">
+                    ({currentPlayingVideo.duration})
+                  </span>
+                </div>
+
+                {/* محدد تنسيقات الفيديو المدعومة في عنصر الـ video */}
+                {!embedInfo.isEmbed && (
+                  <div className="flex items-center gap-1.5 bg-black/50 px-2 py-1 rounded-lg border border-gray-700">
+                    <span className="text-gray-400 text-[10px]">التنسيق المدعوم:</span>
+                    {(['mp4', 'webm', 'ogg'] as const).map((fmt) => (
+                      <button
+                        key={fmt}
+                        type="button"
+                        onClick={() => {
+                          setSelectedVideoFormat(fmt);
+                          setVideoLoadError(null);
+                          showToast(`تم التبديل لتنسيق: ${fmt.toUpperCase()}`);
+                        }}
+                        className={`px-2 py-0.5 rounded text-[10px] font-mono font-bold uppercase transition cursor-pointer ${
+                          selectedVideoFormat === fmt
+                            ? 'bg-rose-600 text-white shadow-xs'
+                            : 'text-gray-400 hover:text-white hover:bg-white/10'
+                        }`}
+                        title={`تشغيل بتنسيق ${fmt.toUpperCase()}`}
+                      >
+                        {fmt}
+                      </button>
+                    ))}
+                  </div>
+                )}
+
+                <div className="flex items-center gap-1 text-[11px]">
+                  <span className="text-gray-400 ml-1">{t('السرعة:')}</span>
+                  {[0.75, 1, 1.25, 1.5, 2].map((rate) => (
+                    <button
+                      key={rate}
+                      type="button"
+                      onClick={() => {
+                        setVideoPlaybackRate(rate);
+                        if (videoPlayerRef.current) videoPlayerRef.current.playbackRate = rate;
+                      }}
+                      className={`px-2 py-0.5 rounded font-mono font-bold transition cursor-pointer ${
+                        videoPlaybackRate === rate
+                          ? 'bg-rose-600 text-white'
+                          : 'bg-white/10 text-gray-300 hover:bg-white/20'
+                      }`}
+                    >
+                      {rate}x
+                    </button>
+                  ))}
+                </div>
+
+                <button
+                  type="button"
+                  onClick={() => {
+                    setIsOfflineVideosDrawerOpen(true);
+                    setIsVideoPlayerOpen(false);
+                  }}
+                  className="px-3 py-1.5 rounded-lg bg-white/10 hover:bg-white/20 text-xs font-semibold flex items-center gap-1.5 cursor-pointer"
+                >
+                  <Film className="w-3.5 h-3.5 text-rose-400" />
+                  <span>{t('فتح مكتبة الفيديوهات')}</span>
+                </button>
+              </div>
             </div>
           </div>
-        </div>
-      )}
+        );
+      })()}
 
       {/* درج مكتبة الفيديوهات المحفوظة للمشاهدة بدون نت */}
       {isOfflineVideosDrawerOpen && (
