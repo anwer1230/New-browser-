@@ -2,8 +2,11 @@ import tailwindcss from '@tailwindcss/vite';
 import react from '@vitejs/plugin-react';
 import path from 'path';
 import {defineConfig} from 'vite';
-import {VitePWA} from 'vite-plugin-pwa';
 
+
+
+const DEV_PROXY_CACHE = new Map<string, { html: string; timestamp: number }>();
+const DEV_CACHE_TTL = 1000 * 60 * 60 * 4; // 4 hours in-memory RAM cache
 
 function webProxyDevPlugin() {
   return {
@@ -15,6 +18,21 @@ function webProxyDevPlugin() {
           try {
             const parsed = new URL(reqUrl, 'http://localhost');
             const targetUrl = parsed.searchParams.get('url') || 'https://www.google.com';
+
+                        // ⚡ فحص فوري للذاكرة المؤقتة السريعة (0 مللي ثانية للشبكات الضعيفة)
+            const cacheKey = `${targetUrl}__ds_${parsed.searchParams.get('dataSaver') || '0'}`;
+            if (DEV_PROXY_CACHE.has(cacheKey)) {
+              const cached = DEV_PROXY_CACHE.get(cacheKey);
+              if (cached && Date.now() - cached.timestamp < DEV_CACHE_TTL) {
+                              res.setHeader('Content-Type', 'text/html; charset=utf-8');
+                res.setHeader('X-Proxy-Cache', 'HIT');
+                res.setHeader('X-Frame-Options', 'ALLOWALL');
+                res.setHeader('Content-Security-Policy', 'frame-ancestors *');
+                res.setHeader('Access-Control-Allow-Origin', '*');
+                res.end(cached.html);
+                return;
+              }
+            }
 
             // 1. Google Home Page
             if (
@@ -351,55 +369,7 @@ export default defineConfig(() => {
       webProxyDevPlugin(),
       react(),
       tailwindcss(),
-      VitePWA({
-        registerType: 'autoUpdate',
-        includeAssets: [
-          'icon.svg',
-          'apple-touch-icon.png',
-          'pwa-192x192.png',
-          'pwa-512x512.png',
-          'pwa-maskable-512x512.png',
-        ],
-        manifest: {
-          id: '/',
-          name: 'AnwerBrowser',
-          short_name: 'AnwerBrowser',
-          description:
-            'متصفح AnwerBrowser وتصفح ذكي بدون إنترنت مع حماية VPN وتحميل الوسائط',
-          theme_color: '#1A73E8',
-          background_color: '#F8F9FA',
-          display: 'standalone',
-          start_url: '/',
-          scope: '/',
-          icons: [
-            {
-              src: '/pwa-192x192.png',
-              sizes: '192x192',
-              type: 'image/png',
-              purpose: 'any',
-            },
-            {
-              src: '/pwa-512x512.png',
-              sizes: '512x512',
-              type: 'image/png',
-              purpose: 'any',
-            },
-            {
-              src: '/pwa-maskable-512x512.png',
-              sizes: '512x512',
-              type: 'image/png',
-              purpose: 'maskable',
-            },
-          ],
-        },
-        workbox: {
-          globPatterns: ['**/*.{js,css,html,ico,png,svg,woff,woff2}'],
-        },
-        devOptions: {
-          enabled: true,
-          type: 'module',
-        },
-      }),
+      
     ],
     resolve: {
       alias: {
