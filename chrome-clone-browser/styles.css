@@ -538,3 +538,592 @@ body {
   align-items: center;
   direction: rtl;
 }
+
+/* ============================================
+   تصميم نتائج بحث Google Chrome (Google SERP المطابق بدقة)
+   ============================================ */
+.google-serp-wrapper {
+  background: #ffffff;
+  min-height: 100%;
+  padding: 0 24px 60px 24px;
+  max-width: 1280px;
+  margin: 0 auto;
+  font-family: 'Google Sans', Roboto, -apple-system, BlinkMacSystemFont, Arial, sans-serif;
+  color: #202124;
+}
+
+/* شريط فئات البحث (Tabs) */
+.google-serp-nav {
+  border-bottom: 1px solid #dadce0;
+  margin-bottom: 12px;
+  position: sticky;
+  top: 0;
+  background: #ffffff;
+  z-index: 20;
+}
+
+.google-tabs-list {
+  display: flex;
+  gap: 8px;
+  overflow-x: auto;
+  scrollbar-width: none;
+}
+
+.google-tabs-list::-webkit-scrollbar {
+  display: none;
+}
+
+.google-tab {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 10px 14px;
+  background: transparent;
+  border: none;
+  border-bottom: 3px solid transparent;
+  color: #5f6368;
+  font-size: 14px;
+  font-weight: 500;
+  cursor: pointer;
+  transition: all 0.15s ease;
+  white-space: nowrap;
+}
+
+.google-tab:hover {
+  color: #202124;
+}
+
+.google-tab.active {
+  color: #1a73e8;
+  border-bottom-color: #1a73e8;
+  font-weight: 600;
+}
+
+.tab-flag {
+  font-size: 15px;
+}
+
+/* سطر إحصائيات البحث (Google Stats Row) */
+.google-stats-line {
+  color: #70757a;
+  font-size: 14px;
+  margin: 8px 0 24px 0;
+  font-weight: 400;
+}
+
+/* التخطيط الشبكي لنتائج جوجل (عمود النتائج + لوحة المعرفة) */
+.google-results-layout {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) 380px;
+  gap: 40px;
+  align-items: start;
+}
+
+@media (max-width: 992px) {
+  .google-results-layout {
+    grid-template-columns: 1fr;
+  }
+  .google-knowledge-column {
+    order: -1;
+    margin-bottom: 24px;
+  }
+}
+
+/* العمود الرئيسي للنتائج */
+.google-main-column {
+  display: flex;
+  flex-direction: column;
+  gap: 28px;
+  max-width: 652px;
+}
+
+/* بطاقة النتيجة العضوية لـ Google */
+.google-serp-card {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  padding-bottom: 4px;
+  transition: opacity 0.2s;
+}
+
+/* سطر المصدر والمسار */
+.google-result-source {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  margin-bottom: 4px;
+}
+
+.source-favicon-circle {
+  width: 28px;
+  height: 28px;
+  border-radius: 50%;
+  background: #f1f3f4;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 13px;
+  font-weight: 700;
+  color: #3c4043;
+  flex-shrink: 0;
+  border: 1px solid #e8eaed;
+}
+
+.source-meta {
+  display: flex;
+  flex-direction: column;
+  line-height: 1.3;
+}
+
+.source-display-name {
+  font-size: 14px;
+  color: #202124;
+  font-weight: 500;
+}
+
+.source-breadcrumb {
+  font-size: 12px;
+  color: #4d5156;
+  direction: ltr;
+  text-align: right;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  max-width: 480px;
+}
+
+.source-more-btn {
+  margin-right: auto;
+  background: none;
+  border: none;
+  color: #70757a;
+  cursor: pointer;
+  padding: 4px 6px;
+  border-radius: 50%;
+  font-size: 16px;
+}
+
+.source-more-btn:hover {
+  background: #f1f3f4;
+}
+
+/* عنوان نتيجة جوجل الأزرق الشهير */
+.google-result-title {
+  margin: 0;
+  padding: 0;
+  font-size: 20px;
+  line-height: 1.3;
+  font-weight: 400;
+}
+
+.google-result-title a {
+  color: #1a0dab;
+  text-decoration: none;
+  cursor: pointer;
+}
+
+.google-result-title a:hover {
+  text-decoration: underline;
+}
+
+.google-result-title a:visited {
+  color: #609;
+}
+
+/* شارة الترجمة العربية المعتمدة داخل العنوان */
+.google-ar-chip {
+  display: inline-block;
+  background: #e6f4ea;
+  color: #137333;
+  border: 1px solid #ceead6;
+  font-size: 12px;
+  font-weight: 600;
+  padding: 2px 8px;
+  border-radius: 12px;
+  margin-left: 8px;
+  vertical-align: middle;
+}
+
+/* مقتطف النتيجة (Snippet) */
+.google-result-snippet {
+  font-size: 14px;
+  line-height: 1.58;
+  color: #4d5156;
+  margin: 3px 0 0 0;
+  word-wrap: break-word;
+}
+
+.google-result-snippet b {
+  color: #202124;
+  font-weight: 700;
+}
+
+.snippet-date {
+  color: #70757a;
+  font-size: 13px;
+}
+
+/* روابط فرعية ذكية (Google Sitelinks) */
+.google-sitelinks-bar {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin-top: 8px;
+}
+
+.google-sitelink {
+  display: inline-flex;
+  align-items: center;
+  font-size: 13px;
+  color: #1a0dab;
+  background: #f8f9fa;
+  border: 1px solid #dadce0;
+  padding: 4px 10px;
+  border-radius: 16px;
+  text-decoration: none;
+  cursor: pointer;
+  transition: all 0.15s;
+}
+
+.google-sitelink:hover {
+  background: #f1f3f4;
+  border-color: #bdc1c6;
+  text-decoration: underline;
+}
+
+.google-code-tag {
+  display: inline-flex;
+  align-items: center;
+  font-family: monospace;
+  font-size: 11px;
+  background: #e8f0fe;
+  color: #1a73e8;
+  padding: 2px 8px;
+  border-radius: 6px;
+  font-weight: 600;
+}
+
+/* بطاقة فيديو جوجل (Google Video SERP Item) */
+.google-video-serp-item {
+  display: flex;
+  gap: 16px;
+  padding: 12px;
+  border: 1px solid #e8eaed;
+  border-radius: 12px;
+  background: #ffffff;
+  transition: box-shadow 0.2s;
+}
+
+.google-video-serp-item:hover {
+  box-shadow: 0 1px 6px rgba(32,33,36,0.12);
+}
+
+.google-video-thumb-wrapper {
+  flex-shrink: 0;
+}
+
+.google-video-thumb {
+  width: 140px;
+  height: 80px;
+  border-radius: 8px;
+  background: linear-gradient(135deg, #202124, #3c4043);
+  position: relative;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  color: #ffffff;
+}
+
+.video-play-icon {
+  font-size: 24px;
+  opacity: 0.9;
+}
+
+.video-duration {
+  position: absolute;
+  bottom: 4px;
+  left: 4px;
+  background: rgba(0,0,0,0.8);
+  color: #ffffff;
+  font-size: 10px;
+  padding: 1px 4px;
+  border-radius: 3px;
+  font-family: monospace;
+}
+
+.google-video-details {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  flex: 1;
+}
+
+/* لوحة المعرفة لـ Google (Knowledge Graph Panel) */
+.google-knowledge-panel {
+  border: 1px solid #dadce0;
+  border-radius: 12px;
+  padding: 20px;
+  background: #ffffff;
+  box-shadow: 0 1px 4px rgba(32,33,36,0.06);
+  position: sticky;
+  top: 60px;
+}
+
+.kp-header {
+  display: flex;
+  gap: 16px;
+  align-items: flex-start;
+}
+
+.kp-poster-placeholder {
+  width: 80px;
+  height: 100px;
+  border-radius: 8px;
+  background: linear-gradient(135deg, #1a73e8, #7c3aed);
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  color: #ffffff;
+  position: relative;
+  flex-shrink: 0;
+}
+
+.kp-film-icon {
+  font-size: 32px;
+}
+
+.kp-live-badge {
+  position: absolute;
+  bottom: 4px;
+  background: rgba(0,0,0,0.7);
+  font-size: 9px;
+  font-weight: 700;
+  padding: 1px 4px;
+  border-radius: 3px;
+}
+
+.kp-main-info {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.kp-title {
+  font-size: 22px;
+  font-weight: 500;
+  color: #202124;
+  margin: 0;
+}
+
+.kp-subtitle {
+  font-size: 13px;
+  color: #70757a;
+}
+
+.kp-rating-row {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  margin-top: 4px;
+}
+
+.kp-stars {
+  color: #fbbc04;
+  font-size: 14px;
+}
+
+.kp-rating-score {
+  font-weight: 700;
+  font-size: 13px;
+}
+
+.kp-rating-source {
+  font-size: 11px;
+  color: #70757a;
+}
+
+.kp-divider {
+  height: 1px;
+  background: #ebebeb;
+  margin: 16px 0;
+}
+
+.kp-status-badge {
+  display: inline-block;
+  padding: 4px 10px;
+  border-radius: 14px;
+  font-size: 12px;
+  font-weight: 600;
+  margin-bottom: 8px;
+}
+
+.kp-status-badge.available {
+  background: #e6f4ea;
+  color: #137333;
+  border: 1px solid #ceead6;
+}
+
+.kp-status-badge.checking {
+  background: #fef7e0;
+  color: #b06000;
+  border: 1px solid #fce8b2;
+}
+
+.kp-description {
+  font-size: 13px;
+  line-height: 1.6;
+  color: #3c4043;
+  margin: 0;
+}
+
+.kp-attributes {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.kp-attr-row {
+  display: flex;
+  justify-content: space-between;
+  font-size: 13px;
+}
+
+.kp-attr-label {
+  color: #70757a;
+}
+
+.kp-attr-val {
+  color: #202124;
+  font-weight: 500;
+}
+
+.kp-actions {
+  display: flex;
+  gap: 8px;
+  margin-top: 8px;
+}
+
+.kp-action-btn {
+  flex: 1;
+  padding: 8px 12px;
+  border-radius: 20px;
+  font-size: 13px;
+  font-weight: 500;
+  cursor: pointer;
+  border: 1px solid transparent;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  transition: all 0.15s;
+}
+
+.kp-action-btn.primary {
+  background: #1a73e8;
+  color: #ffffff;
+}
+
+.kp-action-btn.primary:hover {
+  background: #1557b0;
+}
+
+.kp-action-btn.secondary {
+  background: #f1f3f4;
+  color: #3c4043;
+  border-color: #dadce0;
+}
+
+.kp-action-btn.secondary:hover {
+  background: #e8eaed;
+}
+
+/* عمليات بحث ذات صلة (Related Searches) */
+.google-related-searches {
+  margin-top: 20px;
+  padding-top: 20px;
+  border-top: 1px solid #ebebeb;
+}
+
+.related-title {
+  font-size: 18px;
+  font-weight: 500;
+  color: #202124;
+  margin-bottom: 12px;
+}
+
+.related-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(240px, 1fr));
+  gap: 8px;
+}
+
+.related-chip {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  background: #f1f3f4;
+  padding: 10px 14px;
+  border-radius: 20px;
+  font-size: 14px;
+  color: #1a73e8;
+  cursor: pointer;
+  transition: background 0.15s;
+}
+
+.related-chip:hover {
+  background: #e8eaed;
+  text-decoration: underline;
+}
+
+.related-chip svg {
+  color: #70757a;
+  flex-shrink: 0;
+}
+
+/* ترقيم صفحات جوجل الرسمي (Gooooooogle) */
+.google-serp-pagination {
+  margin: 40px 0 20px 0;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 16px;
+}
+
+.google-logo-pagination {
+  font-size: 32px;
+  font-family: 'Product Sans', Arial, sans-serif;
+  letter-spacing: -1px;
+  font-weight: 600;
+  user-select: none;
+}
+
+.pagination-pages {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+
+.page-num {
+  font-size: 13px;
+  color: #1a73e8;
+  cursor: pointer;
+  padding: 4px 8px;
+  border-radius: 4px;
+}
+
+.page-num.active {
+  color: #202124;
+  font-weight: 700;
+  cursor: default;
+}
+
+.page-next {
+  font-size: 13px;
+  color: #1a73e8;
+  cursor: pointer;
+  font-weight: 500;
+}
+
+.page-next:hover, .page-num:hover:not(.active) {
+  text-decoration: underline;
+}
