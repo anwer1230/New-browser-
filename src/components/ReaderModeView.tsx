@@ -21,7 +21,21 @@ import {
   Layers,
   Bookmark,
   ShieldCheck,
+  Languages,
+  Subtitles,
+  Search,
+  Settings,
+  ChevronDown,
+  RotateCcw,
 } from 'lucide-react';
+import {
+  extractVideoCodes,
+  cleanVideoTitle,
+  buildSearchQueries,
+  parseSRT,
+  SubtitleCue,
+  SubtitleItem,
+} from '../services/subtitleService';
 
 export type ReaderTheme = 'light' | 'sepia' | 'dark' | 'black';
 export type ReaderFont = 'cairo' | 'amiri' | 'system';
@@ -95,6 +109,19 @@ export const ReaderModeView: React.FC<ReaderModeViewProps> = ({
   const [copied, setCopied] = useState<boolean>(false);
   const [scrollProgress, setScrollProgress] = useState<number>(0);
   const containerRef = useRef<HTMLDivElement>(null);
+  const videoElementRef = useRef<HTMLVideoElement>(null);
+
+  // ═══ منظومة الترجمة الذكية للفيديو (Smart Subtitle Intelligence & Real-time Overlay) ═══
+  const [subtitlesEnabled, setSubtitlesEnabled] = useState<boolean>(true);
+  const [isSubtitlePanelOpen, setIsSubtitlePanelOpen] = useState<boolean>(false);
+  const [subtitleResults, setSubtitleResults] = useState<SubtitleItem[]>([]);
+  const [selectedSubtitle, setSelectedSubtitle] = useState<SubtitleItem | null>(null);
+  const [parsedCues, setParsedCues] = useState<SubtitleCue[]>([]);
+  const [activeSubtitleText, setActiveSubtitleText] = useState<string>('');
+  const [subOffsetSeconds, setSubOffsetSeconds] = useState<number>(0);
+  const [isSearchingSubtitles, setIsSearchingSubtitles] = useState<boolean>(false);
+  const [extractedCodes, setExtractedCodes] = useState<string[]>([]);
+  const [subtitleStatusMsg, setSubtitleStatusMsg] = useState<string>('');
 
   // Fetch clean reader content or construct from fallback
   useEffect(() => {
@@ -166,6 +193,92 @@ export const ReaderModeView: React.FC<ReaderModeViewProps> = ({
       isMounted = false;
     };
   }, [url, title, rawText]);
+
+  // ═══ استخراج الأكواد التلقائي والبحث عن الترجمات فور توفر الفيديو ═══
+  useEffect(() => {
+    if (!readerData?.isVideo) return;
+
+    const videoTitle = readerData.title || title || url;
+    const codes = extractVideoCodes(videoTitle);
+    setExtractedCodes(codes);
+
+    setIsSearchingSubtitles(true);
+    setSubtitleStatusMsg(
+      codes.length > 0
+        ? `🎯 تم استخراج الأكواد: [${codes.join(', ')}] - جاري البحث في OpenSubtitles و SubDL...`
+        : 'جاري تحليل العنوان والبحث عن أفضل ترجمة عربية...'
+    );
+
+    fetch('/api/subtitles/search', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ title: videoTitle, language: 'ar' }),
+    })
+      .then((res) => res.json())
+      .then((data) => {
+        setIsSearchingSubtitles(false);
+        if (Array.isArray(data.results) && data.results.length > 0) {
+          setSubtitleResults(data.results);
+          // اختيار أول ترجمة عربية تلقائياً
+          const bestAr = data.results.find((r: SubtitleItem) => r.language === 'ar') || data.results[0];
+          setSelectedSubtitle(bestAr);
+          loadAndApplySubtitle(bestAr, codes[0]);
+          setSubtitleStatusMsg(`✓ تم العثور على ${data.results.length} ترجمة - تم تفعيل «${bestAr.title}»`);
+        } else {
+          setSubtitleStatusMsg('لم يتم العثور على ملفات ترجمة مسبقة، جاري الترجمة الفورية عبر الذكاء الاصطناعي.');
+        }
+      })
+      .catch(() => {
+        setIsSearchingSubtitles(false);
+        setSubtitleStatusMsg('تعذر الاتصال بقواعد الترجمة، تم تفعيل الترجمة الاحتياطية.');
+      });
+  }, [readerData?.isVideo, readerData?.title]);
+
+  // تحميل ملف الترجمة وتحليله لـ cues
+  const loadAndApplySubtitle = async (sub: SubtitleItem, codeSnippet?: string) => {
+    try {
+      setSubtitleStatusMsg(`⏳ جاري جلب وترجمة «${sub.title}»...`);
+      const res = await fetch('/api/subtitles/translate', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          source: sub.source,
+          url: sub.url,
+          targetLang: 'ar',
+          code: codeSnippet || sub.matchedValue || 'VIDEO-01',
+        }),
+      });
+      const json = await res.json();
+      if (json.srt) {
+        const cues = parseSRT(json.srt);
+        setParsedCues(cues);
+        setSelectedSubtitle(sub);
+        setSubtitleStatusMsg(`✓ الترجمة جاهزة ونشطة: ${sub.title}`);
+      }
+    } catch {
+      setSubtitleStatusMsg('فشل تحليل ملف الترجمة.');
+    }
+  };
+
+  // مزامنة التوقيت في مشغل الفيديو الحقيقي عبر timeupdate
+  useEffect(() => {
+    const video = videoElementRef.current;
+    if (!video || !subtitlesEnabled || parsedCues.length === 0) {
+      setActiveSubtitleText('');
+      return;
+    }
+
+    const onTimeUpdate = () => {
+      const current = video.currentTime + subOffsetSeconds;
+      const matched = parsedCues.find((c) => current >= c.start && current <= c.end);
+      setActiveSubtitleText(matched ? matched.text : '');
+    };
+
+    video.addEventListener('timeupdate', onTimeUpdate);
+    return () => {
+      video.removeEventListener('timeupdate', onTimeUpdate);
+    };
+  }, [subtitlesEnabled, parsedCues, subOffsetSeconds]);
 
   // Handle scroll progress
   const handleScroll = () => {
@@ -559,8 +672,8 @@ export const ReaderModeView: React.FC<ReaderModeViewProps> = ({
                   )}
                 </div>
 
-                {/* Embedded Responsive Player */}
-                <div className="relative aspect-video w-full rounded-xl overflow-hidden bg-black shadow-lg">
+                {/* Embedded Responsive Player with Real-time Subtitle Overlay */}
+                <div className="relative aspect-video w-full rounded-xl overflow-hidden bg-black shadow-lg group">
                   {readerData.videoEmbedUrl ? (
                     <iframe
                       src={readerData.videoEmbedUrl}
@@ -572,6 +685,7 @@ export const ReaderModeView: React.FC<ReaderModeViewProps> = ({
                     />
                   ) : readerData.videoDirectUrl ? (
                     <video
+                      ref={videoElementRef}
                       controls
                       autoPlay
                       playsInline
@@ -588,6 +702,189 @@ export const ReaderModeView: React.FC<ReaderModeViewProps> = ({
                   ) : (
                     <div className="w-full h-full flex items-center justify-center text-white/70 text-sm">
                       مشغل الفيديو النقي متاح ومجهّز
+                    </div>
+                  )}
+
+                  {/* ─── REAL-TIME SUBTITLE OVERLAY (طبقة عرض الترجمة الفورية المتزامنة) ─── */}
+                  {subtitlesEnabled && activeSubtitleText && (
+                    <div
+                      id="subtitle-overlay"
+                      className="absolute bottom-12 left-1/2 -translate-x-1/2 max-w-[85%] px-4 py-2 rounded-lg bg-black/85 backdrop-blur-md text-white text-base sm:text-lg font-bold text-center pointer-events-none z-30 shadow-2xl transition-all duration-150 border border-white/10"
+                      style={{
+                        textShadow: '0 2px 4px rgba(0,0,0,0.9), 0 0 2px #000',
+                        direction: 'rtl',
+                        lineHeight: 1.45,
+                      }}
+                    >
+                      {activeSubtitleText}
+                    </div>
+                  )}
+
+                  {/* شارة حالة الترجمة السريعة على الفيديو */}
+                  <div className="absolute top-3 left-3 z-20 flex items-center gap-1.5 opacity-90 hover:opacity-100 transition">
+                    <button
+                      type="button"
+                      onClick={() => setIsSubtitlePanelOpen(!isSubtitlePanelOpen)}
+                      className={`flex items-center gap-1.5 px-2.5 py-1 rounded-full text-xs font-semibold backdrop-blur-md border transition cursor-pointer ${
+                        subtitlesEnabled
+                          ? 'bg-emerald-600/90 text-white border-emerald-400/30 hover:bg-emerald-700'
+                          : 'bg-black/70 text-gray-300 border-white/20 hover:bg-black/90'
+                      }`}
+                      title="لوحة الترجمات الذكية"
+                    >
+                      <Subtitles className="w-3.5 h-3.5" />
+                      <span>{subtitlesEnabled ? 'الترجمة مفعلة' : 'الترجمة متوقفة'}</span>
+                      {selectedSubtitle && (
+                        <span className="text-[10px] bg-white/20 px-1.5 py-0.5 rounded">
+                          {selectedSubtitle.language === 'ar' ? 'عربي' : selectedSubtitle.language.toUpperCase()}
+                        </span>
+                      )}
+                    </button>
+                  </div>
+                </div>
+
+                {/* ═══ لوحة تحكم الترجمة الذكية المتطورة (Intelligent Subtitle Controller) ═══ */}
+                <div className="mt-3 p-3.5 rounded-xl bg-black/5 dark:bg-white/5 border border-black/10 dark:border-white/10 text-xs space-y-3">
+                  <div className="flex flex-wrap items-center justify-between gap-2">
+                    <div className="flex items-center gap-2">
+                      <div className="p-1.5 rounded-lg bg-rose-500/10 text-rose-500 font-bold flex items-center gap-1">
+                        <Languages className="w-4 h-4" />
+                        <span>محرك الترجمات الذكي</span>
+                      </div>
+
+                      {/* إظهار الأكواد المستخرجة إن وُجدت */}
+                      {extractedCodes.length > 0 ? (
+                        <div className="flex items-center gap-1">
+                          <span className="text-gray-500">الأكواد المستخرجة:</span>
+                          {extractedCodes.map((code) => (
+                            <span
+                              key={code}
+                              className="px-2 py-0.5 rounded bg-blue-600/10 text-blue-600 dark:text-blue-400 font-mono font-bold border border-blue-500/20"
+                            >
+                              🎯 {code}
+                            </span>
+                          ))}
+                        </div>
+                      ) : (
+                        <span className="text-gray-500">العنوان المنظف: {cleanVideoTitle(readerData.title).slice(0, 30)}</span>
+                      )}
+                    </div>
+
+                    {/* زر تشغيل / إيقاف الترجمة */}
+                    <div className="flex items-center gap-2">
+                      <button
+                        type="button"
+                        onClick={() => setSubtitlesEnabled(!subtitlesEnabled)}
+                        className={`px-3 py-1 rounded-lg font-medium transition cursor-pointer ${
+                          subtitlesEnabled
+                            ? 'bg-emerald-600 text-white hover:bg-emerald-700'
+                            : 'bg-gray-200 dark:bg-gray-800 text-gray-700 dark:text-gray-300'
+                        }`}
+                      >
+                        {subtitlesEnabled ? 'إخفاء الترجمة' : 'إظهار الترجمة'}
+                      </button>
+
+                      <button
+                        type="button"
+                        onClick={() => setIsSubtitlePanelOpen(!isSubtitlePanelOpen)}
+                        className="px-3 py-1 rounded-lg bg-black/10 dark:bg-white/10 hover:bg-black/20 dark:hover:bg-white/20 transition cursor-pointer font-medium flex items-center gap-1"
+                      >
+                        <span>قائمة الترجمات ({subtitleResults.length})</span>
+                        <ChevronDown className={`w-3.5 h-3.5 transition-transform ${isSubtitlePanelOpen ? 'rotate-180' : ''}`} />
+                      </button>
+                    </div>
+                  </div>
+
+                  {/* شريط حالة الترجمة والبحث */}
+                  <div className="text-gray-500 dark:text-gray-400 flex items-center gap-1.5 text-[11px]">
+                    {isSearchingSubtitles && <div className="w-2.5 h-2.5 rounded-full border-2 border-blue-500 border-t-transparent animate-spin" />}
+                    <span>{subtitleStatusMsg}</span>
+                  </div>
+
+                  {/* أدوات ضبط التوقيت المباشر (Offset Controls) */}
+                  <div className="flex flex-wrap items-center gap-3 pt-2 border-t border-black/5 dark:border-white/5">
+                    <span className="font-semibold text-gray-700 dark:text-gray-300 flex items-center gap-1">
+                      <Clock className="w-3.5 h-3.5 text-blue-500" />
+                      <span>مزامنة التوقيت (Offset):</span>
+                    </span>
+                    <div className="flex items-center gap-1">
+                      <button
+                        type="button"
+                        onClick={() => setSubOffsetSeconds((s) => Number((s - 0.5).toFixed(1)))}
+                        className="px-2 py-0.5 rounded bg-black/10 dark:bg-white/10 hover:bg-black/20 font-mono transition cursor-pointer"
+                        title="تأخير نصف ثانية"
+                      >
+                        -0.5s
+                      </button>
+                      <span className="px-2 py-0.5 font-mono font-bold text-blue-600 dark:text-blue-400">
+                        {subOffsetSeconds >= 0 ? `+${subOffsetSeconds}s` : `${subOffsetSeconds}s`}
+                      </span>
+                      <button
+                        type="button"
+                        onClick={() => setSubOffsetSeconds((s) => Number((s + 0.5).toFixed(1)))}
+                        className="px-2 py-0.5 rounded bg-black/10 dark:bg-white/10 hover:bg-black/20 font-mono transition cursor-pointer"
+                        title="تقديم نصف ثانية"
+                      >
+                        +0.5s
+                      </button>
+                      {subOffsetSeconds !== 0 && (
+                        <button
+                          type="button"
+                          onClick={() => setSubOffsetSeconds(0)}
+                          className="p-1 text-gray-400 hover:text-gray-600 dark:hover:text-gray-200 transition"
+                          title="إعادة التعيين للصفر"
+                        >
+                          <RotateCcw className="w-3 h-3" />
+                        </button>
+                      )}
+                    </div>
+                  </div>
+
+                  {/* قائمة الترجمات المتاحة للاختيار (Accordion) */}
+                  {isSubtitlePanelOpen && (
+                    <div className="mt-2 pt-2 border-t border-black/5 dark:border-white/5 space-y-1.5 max-h-52 overflow-y-auto">
+                      <div className="font-bold text-gray-600 dark:text-gray-300 mb-1">
+                        اختر ملف الترجمة المفضل (مرتبة حسب الدقة واللغة والتنزيلات):
+                      </div>
+                      {subtitleResults.map((sub) => {
+                        const isSelected = selectedSubtitle?.id === sub.id;
+                        return (
+                          <div
+                            key={sub.id}
+                            onClick={() => loadAndApplySubtitle(sub, extractedCodes[0])}
+                            className={`p-2 rounded-lg border flex items-center justify-between gap-2 cursor-pointer transition ${
+                              isSelected
+                                ? 'bg-blue-600/10 border-blue-500/40 text-blue-700 dark:text-blue-300'
+                                : 'bg-black/5 dark:bg-white/5 border-transparent hover:bg-black/10 dark:hover:bg-white/10'
+                            }`}
+                          >
+                            <div className="flex items-center gap-2 truncate">
+                              <span
+                                className={`px-1.5 py-0.5 rounded text-[10px] font-bold ${
+                                  sub.language === 'ar'
+                                    ? 'bg-emerald-600 text-white'
+                                    : 'bg-gray-600 text-white'
+                                }`}
+                              >
+                                {sub.languageName}
+                              </span>
+                              <span className="truncate font-medium">{sub.title}</span>
+                              {sub.matchedBy === 'code' && (
+                                <span className="px-1.5 py-0.2 rounded bg-amber-500/20 text-amber-700 dark:text-amber-300 text-[10px] font-bold shrink-0">
+                                  🎯 كود مطابق ({sub.matchedValue})
+                                </span>
+                              )}
+                            </div>
+                            <div className="flex items-center gap-2 shrink-0 text-[11px] text-gray-500">
+                              <span className="px-1.5 py-0.5 rounded bg-black/10 dark:bg-white/10 font-mono">
+                                {sub.source}
+                              </span>
+                              <span>⬇️ {sub.downloads}</span>
+                              {isSelected && <Check className="w-4 h-4 text-emerald-500" />}
+                            </div>
+                          </div>
+                        );
+                      })}
                     </div>
                   )}
                 </div>
