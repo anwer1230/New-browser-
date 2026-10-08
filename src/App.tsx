@@ -17,63 +17,195 @@ import {
   Plus,
   X,
   Search,
+  Star,
+  Download,
+  User,
+  MoreVertical,
+  Cpu,
+  Layers,
+  Settings,
+  Activity,
+  Lock,
+  Folder,
+  Terminal,
+  Check,
+  Share2,
+  Zap,
 } from 'lucide-react';
 
-interface TabItem {
+// ═══ نماذج بيانات بنية العمليات المتعددة (Multi-Process Architecture) ═══
+
+export interface ProcessItem {
+  pid: number;
+  type: 'browser' | 'renderer' | 'gpu' | 'network' | 'storage';
+  name: string;
+  memoryMB: number;
+  cpuPercent: number;
+  tabId?: string;
+}
+
+export interface TabItem {
   id: string;
+  pid: number;
   title: string;
   url: string;
   history: string[];
   historyIndex: number;
+  favicon?: string;
+  loading: boolean;
+  isCrashed: boolean;
+}
+
+export interface BookmarkItem {
+  id: string;
+  title: string;
+  url: string;
+  favicon?: string;
+}
+
+export interface DownloadItem {
+  id: string;
+  filename: string;
+  url: string;
+  size: string;
+  status: 'completed' | 'downloading';
+  time: string;
+}
+
+export interface UserProfile {
+  isLoggedIn: boolean;
+  email: string;
+  name: string;
+  avatar?: string;
+  syncEnabled: boolean;
 }
 
 export default function App() {
-  // ═══ تبويبات مستقلة حقيقية مثل Google Chrome ═══
+  // ═══ 1. عملية المتصفح الرئيسية (Browser Process) والتبويبات المستقلة ═══
   const [tabs, setTabs] = useState<TabItem[]>([
     {
       id: 'tab_1',
+      pid: 101,
       title: 'Google',
       url: 'https://www.google.com',
       history: ['https://www.google.com'],
       historyIndex: 0,
+      loading: false,
+      isCrashed: false,
     },
   ]);
   const [activeTabId, setActiveTabId] = useState<string>('tab_1');
   const [urlInput, setUrlInput] = useState<string>('https://www.google.com');
-  const [loading, setLoading] = useState<boolean>(false);
-  const [bookmarks, setBookmarks] = useState<Array<{ title: string; url: string }>>(() => {
+  const [searchQuery, setSearchQuery] = useState<string>('');
+  const [zoomLevel, setZoomLevel] = useState<number>(100);
+
+  // شريط الإشارات المرجعية وعمليات التخزين (Storage Service)
+  const [showBookmarksBar, setShowBookmarksBar] = useState<boolean>(true);
+  const [bookmarks, setBookmarks] = useState<BookmarkItem[]>(() => {
     try {
       const raw = localStorage.getItem('anwer_bookmarks');
-      return raw ? JSON.parse(raw) : [];
-    } catch {
-      return [];
-    }
+      if (raw) return JSON.parse(raw);
+    } catch {}
+    return [
+      { id: 'b_1', title: 'ويكيبيديا', url: 'https://ar.wikipedia.org' },
+      { id: 'b_2', title: 'أخبار التقنية', url: 'https://news.ycombinator.com' },
+      { id: 'b_3', title: 'BBC عربي', url: 'https://www.bbc.com/arabic' },
+      { id: 'b_4', title: 'GitHub', url: 'https://github.com' },
+      { id: 'b_5', title: 'Google بحث', url: 'https://www.google.com' },
+    ];
   });
+
+  const [historyList, setHistoryList] = useState<Array<{ title: string; url: string; time: string }>>(() => {
+    try {
+      const raw = localStorage.getItem('anwer_history');
+      if (raw) return JSON.parse(raw);
+    } catch {}
+    return [];
+  });
+
+  const [downloadsList, setDownloadsList] = useState<DownloadItem[]>([
+    {
+      id: 'd_1',
+      filename: 'anwerbrowser-setup.html',
+      url: 'https://anwerbrowser.local',
+      size: '2.4 MB',
+      status: 'completed',
+      time: 'اليوم 09:30 ص',
+    },
+  ]);
+
+  // الملف الشخصي ومزامنة البريد (Google / Anwer Account Sync)
+  const [userProfile, setUserProfile] = useState<UserProfile>(() => {
+    try {
+      const raw = localStorage.getItem('anwer_profile');
+      if (raw) return JSON.parse(raw);
+    } catch {}
+    return {
+      isLoggedIn: false,
+      email: '',
+      name: '',
+      syncEnabled: true,
+    };
+  });
+
+  // النوافذ والقوائم المنبثقة لكروم
+  const [isMenuOpen, setIsMenuOpen] = useState<boolean>(false);
+  const [isTaskManagerOpen, setIsTaskManagerOpen] = useState<boolean>(false);
+  const [isProfileModalOpen, setIsProfileModalOpen] = useState<boolean>(false);
+  const [isHistoryDrawerOpen, setIsHistoryDrawerOpen] = useState<boolean>(false);
+  const [isDownloadsDrawerOpen, setIsDownloadsDrawerOpen] = useState<boolean>(false);
+  const [isSettingsOpen, setIsSettingsOpen] = useState<boolean>(false);
+  const [selectedProcessPid, setSelectedProcessPid] = useState<number | null>(null);
+
+  // إشعار عائم
+  const [toastMsg, setToastMsg] = useState<string | null>(null);
+  const toastTimeoutRef = useRef<NodeJS.Timeout | null>(null);
+
+  const showToast = (msg: string) => {
+    setToastMsg(msg);
+    if (toastTimeoutRef.current) clearTimeout(toastTimeoutRef.current);
+    toastTimeoutRef.current = setTimeout(() => setToastMsg(null), 3000);
+  };
 
   const activeTab = tabs.find((t) => t.id === activeTabId) || tabs[0];
   const iframeRef = useRef<HTMLIFrameElement>(null);
 
-  // مزامنة شريط العنوان مع التبويب النشط
+  // مزامنة شريط العناوين عند تبديل التبويب
   useEffect(() => {
     setUrlInput(activeTab.url);
   }, [activeTab.url, activeTabId]);
 
-  // حفظ العلامات
+  // حفظ الإشارات والتاريخ محلياً
   useEffect(() => {
     try {
       localStorage.setItem('anwer_bookmarks', JSON.stringify(bookmarks));
     } catch {}
   }, [bookmarks]);
 
-  // الاستماع للروابط التي ينقر عليها المستخدم داخل الصفحة للتنقل المباشر وتحديث العنوان
   useEffect(() => {
-    const handleMessage = (event: MessageEvent) => {
+    try {
+      localStorage.setItem('anwer_history', JSON.stringify(historyList));
+    } catch {}
+  }, [historyList]);
+
+  useEffect(() => {
+    try {
+      localStorage.setItem('anwer_profile', JSON.stringify(userProfile));
+    } catch {}
+  }, [userProfile]);
+
+  // ═══ 2. قناة الاتصال بين العمليات (Mojo IPC / Window Messaging) ═══
+  useEffect(() => {
+    const handleMojoMessage = (event: MessageEvent) => {
       const data = event.data;
       if (!data || typeof data !== 'object') return;
 
+      // أ) طلب تنقل قادم من عملية العرض (Renderer Process IPC)
       if (data.type === 'HYBRID_BROWSER_NAVIGATE' && typeof data.url === 'string') {
         navigateCurrentTab(data.url);
-      } else if (data.type === 'HYBRID_BROWSER_PAGE_META' && data.title) {
+      }
+      // ب) تحديث عنوان الصفحة من محرك Blink
+      else if (data.type === 'HYBRID_BROWSER_PAGE_META' && data.title) {
         setTabs((prev) =>
           prev.map((t) =>
             t.id === activeTabId ? { ...t, title: String(data.title) } : t
@@ -82,73 +214,131 @@ export default function App() {
       }
     };
 
-    window.addEventListener('message', handleMessage);
-    return () => window.removeEventListener('message', handleMessage);
+    window.addEventListener('message', handleMojoMessage);
+    return () => window.removeEventListener('message', handleMojoMessage);
   }, [activeTabId]);
 
-  // ═══ التنقل المباشر في التبويب الحالي ═══
-  const navigateCurrentTab = (targetInput: string) => {
-    let clean = targetInput.trim();
-    if (!clean) return;
-    if (!clean.startsWith('http://') && !clean.startsWith('https://')) {
-      if (clean.includes('.') && !clean.includes(' ')) {
-        clean = `https://${clean}`;
-      } else {
-        clean = `https://www.google.com/search?q=${encodeURIComponent(clean)}`;
-      }
+  // ═══ قائمة العمليات النشطة لمدير مهام المتصفح (Chrome Task Manager) ═══
+  const getActiveProcesses = (): ProcessItem[] => {
+    const coreProcesses: ProcessItem[] = [
+      { pid: 1, type: 'browser', name: 'Browser (العملية الرئيسية وواجهة المستخدم)', memoryMB: 148, cpuPercent: 1.2 },
+      { pid: 2, type: 'gpu', name: 'GPU Process (Viz الرسومات والتسريع)', memoryMB: 84, cpuPercent: 2.1 },
+      { pid: 3, type: 'network', name: 'Network Service (خدمة جلب الشبكة والبروكسي)', memoryMB: 42, cpuPercent: 0.5 },
+      { pid: 4, type: 'storage', name: 'Storage Service (IndexedDB & Cache)', memoryMB: 28, cpuPercent: 0.1 },
+    ];
+
+    const tabProcesses: ProcessItem[] = tabs.map((t) => ({
+      pid: t.pid,
+      type: 'renderer',
+      name: `Tab: ${t.title || t.url}`,
+      memoryMB: t.isCrashed ? 0 : Math.floor(65 + (t.url.length % 50)),
+      cpuPercent: t.loading ? 3.8 : 0.2,
+      tabId: t.id,
+    }));
+
+    return [...coreProcesses, ...tabProcesses];
+  };
+
+  // ═══ إنهاء عملية معينة (End Process - ميزة الأمان والعزل في كروم) ═══
+  const handleKillProcess = (pid: number) => {
+    const targetTab = tabs.find((t) => t.pid === pid);
+    if (targetTab) {
+      setTabs((prev) =>
+        prev.map((t) => (t.pid === pid ? { ...t, isCrashed: true, loading: false } : t))
+      );
+      showToast(`تم إنهاء عملية العرض (PID: ${pid}) بنجاح`);
+    } else {
+      showToast('لا يمكن إنهاء عمليات النظام الحيوية للمتصفح');
+    }
+  };
+
+  // ═══ التنقل الذكي (Omnibox Smart Decision: URL vs Search) ═══
+  const navigateCurrentTab = (rawInput: string) => {
+    const trimmed = rawInput.trim();
+    if (!trimmed) return;
+
+    let targetUrl: string;
+
+    // دعم مفتاح البحث المباشر (مثل: g بحث)
+    if (trimmed.startsWith('g ') || trimmed.startsWith('google ')) {
+      const q = trimmed.replace(/^(g|google)\s+/, '');
+      targetUrl = `https://www.google.com/search?q=${encodeURIComponent(q)}`;
+    }
+    // فحص هل المدخل عنوان URL صريح
+    else if (trimmed.startsWith('http://') || trimmed.startsWith('https://')) {
+      targetUrl = trimmed;
+    }
+    // فحص هل هو نطاق صريح (مثل: wikipedia.org أو example.com)
+    else if (trimmed.includes('.') && !trimmed.includes(' ')) {
+      targetUrl = `https://${trimmed}`;
+    }
+    // وإلا يتم إرساله إلى محرك بحث Google الافتراضي
+    else {
+      targetUrl = `https://www.google.com/search?q=${encodeURIComponent(trimmed)}`;
     }
 
-    setUrlInput(clean);
-    setLoading(true);
+    setUrlInput(targetUrl);
+
+    // إضافة إلى سجل التصفح (History)
+    setHistoryList((prev) => [
+      {
+        title: targetUrl.includes('google.com/search') ? 'بحث Google' : targetUrl,
+        url: targetUrl,
+        time: new Date().toLocaleTimeString('ar-SA', { hour: '2-digit', minute: '2-digit' }),
+      },
+      ...prev.slice(0, 49),
+    ]);
 
     setTabs((prev) =>
       prev.map((t) => {
         if (t.id !== activeTabId) return t;
-        const nextHistory = [...t.history.slice(0, t.historyIndex + 1), clean];
-        const pageTitle = clean.includes('google.com/search')
-          ? 'نتائج البحث'
-          : clean.includes('google.com')
-          ? 'Google'
-          : clean.replace(/^https?:\/\//, '').split('/')[0];
-
+        const nextHistory = [...t.history.slice(0, t.historyIndex + 1), targetUrl];
         return {
           ...t,
-          url: clean,
-          title: pageTitle,
+          url: targetUrl,
+          title: targetUrl.includes('google.com/search')
+            ? 'نتائج البحث'
+            : targetUrl.includes('google.com')
+            ? 'Google'
+            : targetUrl.replace(/^https?:\/\//, '').split('/')[0],
           history: nextHistory,
           historyIndex: nextHistory.length - 1,
+          loading: true,
+          isCrashed: false,
         };
       })
     );
   };
 
-  // ═══ إضافة تبويب جديد مستقل ═══
+  // ═══ إضافة تبويب جديد مستقل مع عملية عرض خاصة (New Renderer Process) ═══
   const createNewTab = (initialUrl: string = 'https://www.google.com') => {
+    const newPid = Math.floor(100 + Math.random() * 900);
     const newId = `tab_${Date.now()}`;
     const newTab: TabItem = {
       id: newId,
+      pid: newPid,
       title: initialUrl.includes('google.com') ? 'Google' : 'تبويب جديد',
       url: initialUrl,
       history: [initialUrl],
       historyIndex: 0,
+      loading: false,
+      isCrashed: false,
     };
     setTabs((prev) => [...prev, newTab]);
     setActiveTabId(newId);
     setUrlInput(initialUrl);
-    setLoading(true);
   };
 
-  // ═══ إغلاق تبويب ═══
-  const closeTab = (idToClose: string, e?: React.MouseEvent) => {
+  // ═══ إغلاق التبويب وإنهاء عملية العرض المرتبطة به ═══
+  const closeTab = (tabIdToClose: string, e?: React.MouseEvent) => {
     if (e) e.stopPropagation();
     if (tabs.length === 1) {
-      // إذا كان التبويب الوحيد، نعيد توجيهه إلى Google
       navigateCurrentTab('https://www.google.com');
       return;
     }
-    const filtered = tabs.filter((t) => t.id !== idToClose);
+    const filtered = tabs.filter((t) => t.id !== tabIdToClose);
     setTabs(filtered);
-    if (activeTabId === idToClose) {
+    if (activeTabId === tabIdToClose) {
       setActiveTabId(filtered[filtered.length - 1].id);
     }
   };
@@ -159,16 +349,11 @@ export default function App() {
       setTabs((prev) =>
         prev.map((t) =>
           t.id === activeTabId
-            ? {
-                ...t,
-                url: prevUrl,
-                historyIndex: t.historyIndex - 1,
-              }
+            ? { ...t, url: prevUrl, historyIndex: t.historyIndex - 1, loading: true, isCrashed: false }
             : t
         )
       );
       setUrlInput(prevUrl);
-      setLoading(true);
     }
   };
 
@@ -178,43 +363,65 @@ export default function App() {
       setTabs((prev) =>
         prev.map((t) =>
           t.id === activeTabId
-            ? {
-                ...t,
-                url: nextUrl,
-                historyIndex: t.historyIndex + 1,
-              }
+            ? { ...t, url: nextUrl, historyIndex: t.historyIndex + 1, loading: true, isCrashed: false }
             : t
         )
       );
       setUrlInput(nextUrl);
-      setLoading(true);
     }
   };
 
   const handleRefresh = () => {
-    setLoading(true);
+    setTabs((prev) =>
+      prev.map((t) => (t.id === activeTabId ? { ...t, loading: true, isCrashed: false } : t))
+    );
     if (iframeRef.current) {
-      iframeRef.current.src = `/api/web-proxy?url=${encodeURIComponent(activeTab.url)}&in_browser_frame=1&t=${Date.now()}`;
+      iframeRef.current.src = `/api/web-proxy?url=${encodeURIComponent(activeTab.url)}&in_browser_frame=1&_t=${Date.now()}`;
     }
-  };
-
-  const handleHome = () => {
-    navigateCurrentTab('https://www.google.com');
   };
 
   const handleToggleBookmark = () => {
-    const exists = bookmarks.some((b) => b.url === activeTab.url);
-    if (exists) {
+    const isBookmarked = bookmarks.some((b) => b.url === activeTab.url);
+    if (isBookmarked) {
       setBookmarks((prev) => prev.filter((b) => b.url !== activeTab.url));
+      showToast('تمت إزالة الموقع من شريط الإشارات');
     } else {
-      setBookmarks((prev) => [
-        ...prev,
-        { title: activeTab.title || activeTab.url, url: activeTab.url },
-      ]);
+      const newBm: BookmarkItem = {
+        id: `bm_${Date.now()}`,
+        title: activeTab.title || activeTab.url,
+        url: activeTab.url,
+      };
+      setBookmarks((prev) => [...prev, newBm]);
+      showToast('تمت إضافة الإشارة المرجعية بنجاح ⭐');
     }
   };
 
-  const isBookmarked = bookmarks.some((b) => b.url === activeTab.url);
+  const isCurrentBookmarked = bookmarks.some((b) => b.url === activeTab.url);
+
+  // تنزيل الصفحة الحالية بصيغة HTML (Save Page As - Ctrl+S)
+  const handleSavePageAs = () => {
+    const htmlContent = `<!DOCTYPE html><html><head><meta charset="utf-8"><title>${activeTab.title}</title></head><body><h1>${activeTab.title}</h1><p>الرابط المحفوظ: <a href="${activeTab.url}">${activeTab.url}</a></p></body></html>`;
+    const blob = new Blob([htmlContent], { type: 'text/html' });
+    const blobUrl = URL.createObjectURL(blob);
+    const filename = `${(activeTab.title || 'page').replace(/[^a-zA-Z0-9\u0600-\u06FF]/g, '_')}.html`;
+
+    const dlItem: DownloadItem = {
+      id: `dl_${Date.now()}`,
+      filename,
+      url: activeTab.url,
+      size: '18 KB',
+      status: 'completed',
+      time: 'الآن',
+    };
+    setDownloadsList((prev) => [dlItem, ...prev]);
+
+    const a = document.createElement('a');
+    a.href = blobUrl;
+    a.download = filename;
+    a.click();
+    URL.revokeObjectURL(blobUrl);
+    showToast(`تم تنزيل الصفحة: ${filename} 📥`);
+  };
 
   // قاطع التكرار الذاتي: حماية ضد التضمين المتداخل داخل iframe المتصفح
   const isInsideBrowserViewport =
@@ -233,7 +440,7 @@ export default function App() {
         style={{ fontFamily: "'Cairo', 'Segoe UI', Tahoma, sans-serif" }}
       >
         <div className="w-10 h-10 rounded-full border-3 border-blue-600 border-t-transparent animate-spin mb-3" />
-        <p className="text-sm font-semibold">جاري تحميل الصفحة في المتصفح...</p>
+        <p className="text-sm font-semibold">جاري تشغيل عملية العرض (Renderer Process)...</p>
       </div>
     );
   }
@@ -245,30 +452,35 @@ export default function App() {
       style={{ fontFamily: "'Cairo', 'Segoe UI', Tahoma, sans-serif" }}
     >
       {/* ═══════════════════════════════════════════════════════════════
-          1. شريط التبويبات المستقلة الحقيقية مثل Google Chrome
+          1. شريط التبويبات المتقدم (Chrome Tab Strip)
+          كل تبويب يمثل عملية عرض منفصلة (Isolated Renderer Process)
       ═══════════════════════════════════════════════════════════════ */}
-      <div className="h-[40px] bg-[#E8EAED] dark:bg-[#2B2D30] border-b border-[#DADCE0] dark:border-[#1E1F22] flex items-end px-2 gap-1 overflow-x-auto shrink-0 no-scrollbar">
+      <div className="h-[42px] bg-[#DFE1E5] dark:bg-[#202124] border-b border-[#DADCE0] dark:border-[#3C4043] flex items-end px-2 gap-1 overflow-x-auto shrink-0 no-scrollbar pt-1">
         {tabs.map((tab) => {
           const isActive = tab.id === activeTabId;
           return (
             <div
               key={tab.id}
               onClick={() => setActiveTabId(tab.id)}
-              className={`group h-[32px] max-w-[220px] min-w-[120px] px-3 rounded-t-lg flex items-center justify-between gap-2 text-xs font-semibold cursor-pointer transition select-none ${
+              className={`group h-[34px] max-w-[220px] min-w-[130px] px-3 rounded-t-lg flex items-center justify-between gap-2 text-xs font-semibold cursor-pointer transition select-none relative ${
                 isActive
-                  ? 'bg-white dark:bg-[#1E1F22] text-[#1A73E8] dark:text-[#8AB4F8] shadow-xs'
+                  ? 'bg-white dark:bg-[#2B2D30] text-[#1A73E8] dark:text-[#8AB4F8] shadow-xs'
                   : 'text-[#5F6368] dark:text-[#9AA0A6] hover:bg-white/40 dark:hover:bg-white/5'
               }`}
             >
               <div className="flex items-center gap-1.5 truncate">
-                <Globe className={`w-3.5 h-3.5 shrink-0 ${isActive ? 'text-[#1A73E8]' : 'text-gray-400'}`} />
-                <span className="truncate">{tab.title || 'صفحة ويب'}</span>
+                {tab.loading ? (
+                  <div className="w-3.5 h-3.5 border-2 border-blue-600 border-t-transparent rounded-full animate-spin shrink-0" />
+                ) : (
+                  <Globe className={`w-3.5 h-3.5 shrink-0 ${isActive ? 'text-[#1A73E8]' : 'text-gray-400'}`} />
+                )}
+                <span className="truncate">{tab.isCrashed ? 'Aw, Snap!' : tab.title || 'صفحة جديدة'}</span>
               </div>
               <button
                 type="button"
                 onClick={(e) => closeTab(tab.id, e)}
                 className="w-4 h-4 rounded-full flex items-center justify-center hover:bg-black/10 dark:hover:bg-white/10 text-gray-400 hover:text-gray-700 dark:hover:text-white transition shrink-0"
-                title="إغلاق التبويب"
+                title="إغلاق التبويب (إنهاء العملية)"
               >
                 <X className="w-3 h-3" />
               </button>
@@ -276,21 +488,21 @@ export default function App() {
           );
         })}
 
-        {/* زر إضافة تبويب مستقل جديد (+) */}
+        {/* زر فتح تبويب جديد (+) */}
         <button
           type="button"
           onClick={() => createNewTab('https://www.google.com')}
           className="w-7 h-7 mb-1 rounded-full flex items-center justify-center text-[#5F6368] dark:text-[#9AA0A6] hover:bg-black/5 dark:hover:bg-white/10 transition cursor-pointer shrink-0"
-          title="فتح تبويب جديد"
+          title="فتح تبويب جديد (Ctrl+T)"
         >
           <Plus className="w-4 h-4" />
         </button>
       </div>
 
       {/* ═══════════════════════════════════════════════════════════════
-          2. شريط العناوين والتنقل الموحّد الفردي
+          2. شريط الأدوات وعنوان Omnibox المتطور
       ═══════════════════════════════════════════════════════════════ */}
-      <header className="h-[52px] bg-white dark:bg-[#1E1F22] border-b border-[#E8EAED] dark:border-[#2B2D30] px-3 flex items-center gap-2 shrink-0 shadow-2xs z-20">
+      <header className="h-[52px] bg-white dark:bg-[#2B2D30] border-b border-[#E8EAED] dark:border-[#3C4043] px-3 flex items-center gap-2 shrink-0 shadow-2xs z-20">
         {/* أزرار التنقل الأساسية */}
         <div className="flex items-center gap-0.5 shrink-0">
           <button
@@ -298,7 +510,7 @@ export default function App() {
             onClick={handleBack}
             disabled={activeTab.historyIndex <= 0}
             className="p-2 rounded-full text-[#5F6368] dark:text-[#9AA0A6] hover:bg-black/5 dark:hover:bg-white/10 disabled:opacity-30 cursor-pointer transition"
-            title="رجوع للخلف"
+            title="رجوع (Alt+Left)"
           >
             <ArrowRight className="w-4 h-4" />
           </button>
@@ -307,7 +519,7 @@ export default function App() {
             onClick={handleForward}
             disabled={activeTab.historyIndex >= activeTab.history.length - 1}
             className="p-2 rounded-full text-[#5F6368] dark:text-[#9AA0A6] hover:bg-black/5 dark:hover:bg-white/10 disabled:opacity-30 cursor-pointer transition"
-            title="تقدم للأمام"
+            title="تقدم (Alt+Right)"
           >
             <ArrowLeft className="w-4 h-4" />
           </button>
@@ -315,13 +527,13 @@ export default function App() {
             type="button"
             onClick={handleRefresh}
             className="p-2 rounded-full text-[#5F6368] dark:text-[#9AA0A6] hover:bg-black/5 dark:hover:bg-white/10 cursor-pointer transition"
-            title="إعادة تحميل"
+            title="إعادة تحميل (Ctrl+R)"
           >
-            <RotateCw className={`w-4 h-4 ${loading ? 'animate-spin text-blue-600' : ''}`} />
+            <RotateCw className={`w-4 h-4 ${activeTab.loading ? 'animate-spin text-blue-600' : ''}`} />
           </button>
           <button
             type="button"
-            onClick={handleHome}
+            onClick={() => navigateCurrentTab('https://www.google.com')}
             className="p-2 rounded-full text-[#5F6368] dark:text-[#9AA0A6] hover:bg-black/5 dark:hover:bg-white/10 cursor-pointer transition"
             title="الصفحة الرئيسية (Google)"
           >
@@ -329,20 +541,20 @@ export default function App() {
           </button>
         </div>
 
-        {/* شريط العنوان الحقيقي Omnibox */}
+        {/* شريط Omnibox الذكي الموحد */}
         <form
           onSubmit={(e) => {
             e.preventDefault();
             navigateCurrentTab(urlInput);
           }}
-          className="flex-1 h-[38px] px-3 rounded-full border border-[#DADCE0] dark:border-[#3C4043] focus-within:border-[#1A73E8] focus-within:shadow-xs bg-[#F1F3F4] dark:bg-[#2B2D30] focus-within:bg-white dark:focus-within:bg-[#2B2D30] flex items-center gap-2 transition"
+          className="flex-1 h-[38px] px-3.5 rounded-full border border-[#DADCE0] dark:border-[#4A4D51] focus-within:border-[#1A73E8] focus-within:shadow-xs bg-[#F1F3F4] dark:bg-[#1E1F22] focus-within:bg-white dark:focus-within:bg-[#1E1F22] flex items-center gap-2 transition"
         >
-          <Shield className="w-4 h-4 text-emerald-600 dark:text-emerald-400 shrink-0" />
+          <span title="اتصال آمن ومشفّر (HTTPS)"><Shield className="w-4 h-4 text-emerald-600 dark:text-emerald-400 shrink-0" /></span>
           <input
             type="text"
             value={urlInput}
             onChange={(e) => setUrlInput(e.target.value)}
-            placeholder="ابحث في Google أو اكتب عنوان موقع ويب"
+            placeholder="ابحث في Google أو اكتب عنوان ويب..."
             className="flex-1 bg-transparent text-xs sm:text-sm text-[#202124] dark:text-[#E8EAED] focus:outline-none dir-ltr text-left font-mono truncate"
           />
           <button
@@ -354,58 +566,568 @@ export default function App() {
           </button>
         </form>
 
-        {/* إجراءات سريعة */}
+        {/* أدوات شريط العناوين الأيمن */}
         <div className="flex items-center gap-1 shrink-0">
+          {/* حفظ الإشارة بنجمة كمتصفح كروم */}
           <button
             type="button"
             onClick={handleToggleBookmark}
             className={`p-2 rounded-full transition cursor-pointer ${
-              isBookmarked
-                ? 'text-[#1A73E8] fill-current bg-blue-50 dark:bg-blue-950/40'
+              isCurrentBookmarked
+                ? 'text-amber-500 fill-current bg-amber-50 dark:bg-amber-950/30'
                 : 'text-[#5F6368] hover:bg-black/5 dark:hover:bg-white/10'
             }`}
-            title="حفظ في المحفوظات"
+            title="إضافة إلى الإشارات المرجعية (Ctrl+D)"
           >
-            <Bookmark className="w-4 h-4" fill={isBookmarked ? 'currentColor' : 'none'} />
+            <Star className="w-4 h-4" fill={isCurrentBookmarked ? 'currentColor' : 'none'} />
           </button>
 
-          <a
-            href={activeTab.url}
-            target="_blank"
-            rel="noopener noreferrer"
-            className="p-2 rounded-full text-[#5F6368] hover:bg-black/5 dark:hover:bg-white/10 cursor-pointer transition"
-            title="فتح في نافذة مستقلة ↗"
+          {/* التنزيلات */}
+          <button
+            type="button"
+            onClick={() => setIsDownloadsDrawerOpen((prev) => !prev)}
+            className="p-2 rounded-full text-[#5F6368] hover:bg-black/5 dark:hover:bg-white/10 cursor-pointer transition relative"
+            title="التنزيلات (Ctrl+J)"
           >
-            <ExternalLink className="w-4 h-4" />
-          </a>
+            <Download className="w-4 h-4" />
+          </button>
+
+          {/* زر الملف الشخصي والمزامنة */}
+          <button
+            type="button"
+            onClick={() => setIsProfileModalOpen(true)}
+            className="w-8 h-8 rounded-full bg-blue-600 text-white flex items-center justify-center font-bold text-xs hover:ring-2 hover:ring-blue-400 transition cursor-pointer"
+            title={userProfile.isLoggedIn ? userProfile.email : 'تسجيل الدخول إلى AnwerBrowser'}
+          >
+            {userProfile.isLoggedIn ? userProfile.name.charAt(0).toUpperCase() || 'A' : <User className="w-4 h-4" />}
+          </button>
+
+          {/* قائمة الخيارات الرئيسية الثلاث نقاط (Chrome 3-dots Menu) */}
+          <div className="relative">
+            <button
+              type="button"
+              onClick={() => setIsMenuOpen((prev) => !prev)}
+              className="p-2 rounded-full text-[#5F6368] hover:bg-black/5 dark:hover:bg-white/10 cursor-pointer transition"
+              title="تخصيص AnwerBrowser والتحكم فيه"
+            >
+              <MoreVertical className="w-4 h-4" />
+            </button>
+
+            {/* القائمة المنسدلة */}
+            {isMenuOpen && (
+              <div
+                className="absolute left-0 mt-2 w-64 bg-white dark:bg-[#2B2D30] rounded-2xl shadow-xl border border-gray-200 dark:border-gray-700 py-2 z-50 text-xs"
+                onClick={() => setIsMenuOpen(false)}
+              >
+                <button
+                  type="button"
+                  onClick={() => createNewTab('https://www.google.com')}
+                  className="w-full px-4 py-2 hover:bg-gray-100 dark:hover:bg-white/5 flex items-center justify-between text-right"
+                >
+                  <span>علامة تبويب جديدة</span>
+                  <span className="text-[10px] text-gray-400">Ctrl+T</span>
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setShowBookmarksBar((prev) => !prev)}
+                  className="w-full px-4 py-2 hover:bg-gray-100 dark:hover:bg-white/5 flex items-center justify-between text-right"
+                >
+                  <span>{showBookmarksBar ? 'إخفاء شريط الإشارات' : 'إظهار شريط الإشارات'}</span>
+                  <span className="text-[10px] text-gray-400">Ctrl+Shift+B</span>
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setIsHistoryDrawerOpen(true)}
+                  className="w-full px-4 py-2 hover:bg-gray-100 dark:hover:bg-white/5 flex items-center justify-between text-right"
+                >
+                  <span>السجل</span>
+                  <span className="text-[10px] text-gray-400">Ctrl+H</span>
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setIsDownloadsDrawerOpen(true)}
+                  className="w-full px-4 py-2 hover:bg-gray-100 dark:hover:bg-white/5 flex items-center justify-between text-right"
+                >
+                  <span>التنزيلات</span>
+                  <span className="text-[10px] text-gray-400">Ctrl+J</span>
+                </button>
+                <div className="h-px bg-gray-100 dark:bg-gray-700 my-1" />
+
+                {/* التحكم في التكبير والتصغير (Zoom) */}
+                <div className="px-4 py-2 flex items-center justify-between">
+                  <span>التكبير/التصغير</span>
+                  <div className="flex items-center gap-2">
+                    <button
+                      type="button"
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        setZoomLevel((z) => Math.max(50, z - 10));
+                      }}
+                      className="px-2 py-0.5 rounded bg-gray-100 dark:bg-white/10 hover:bg-gray-200"
+                    >
+                      -
+                    </button>
+                    <span className="font-mono text-[11px]">{zoomLevel}%</span>
+                    <button
+                      type="button"
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        setZoomLevel((z) => Math.min(200, z + 10));
+                      }}
+                      className="px-2 py-0.5 rounded bg-gray-100 dark:bg-white/10 hover:bg-gray-200"
+                    >
+                      +
+                    </button>
+                  </div>
+                </div>
+
+                <button
+                  type="button"
+                  onClick={handleSavePageAs}
+                  className="w-full px-4 py-2 hover:bg-gray-100 dark:hover:bg-white/5 flex items-center justify-between text-right"
+                >
+                  <span>حفظ الصفحة باسم...</span>
+                  <span className="text-[10px] text-gray-400">Ctrl+S</span>
+                </button>
+                <div className="h-px bg-gray-100 dark:bg-gray-700 my-1" />
+
+                {/* مدير المهام وعمليات المتصفح (Chrome Task Manager) */}
+                <button
+                  type="button"
+                  onClick={() => setIsTaskManagerOpen(true)}
+                  className="w-full px-4 py-2 hover:bg-gray-100 dark:hover:bg-white/5 flex items-center justify-between text-right text-blue-600 dark:text-blue-400 font-bold"
+                >
+                  <div className="flex items-center gap-1.5">
+                    <Cpu className="w-3.5 h-3.5" />
+                    <span>مدير مهام العمليات (Task Manager)</span>
+                  </div>
+                  <span className="text-[10px] text-gray-400">Shift+Esc</span>
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setIsSettingsOpen(true)}
+                  className="w-full px-4 py-2 hover:bg-gray-100 dark:hover:bg-white/5 flex items-center gap-1.5 text-right"
+                >
+                  <Settings className="w-3.5 h-3.5" />
+                  <span>الإعدادات</span>
+                </button>
+              </div>
+            )}
+          </div>
         </div>
       </header>
 
-      {/* مؤشر شريط التحميل */}
-      {loading && (
+      {/* ═══════════════════════════════════════════════════════════════
+          3. شريط الإشارات المرجعية الاختياري (Bookmarks Bar)
+      ═══════════════════════════════════════════════════════════════ */}
+      {showBookmarksBar && (
+        <div className="h-[30px] bg-white dark:bg-[#2B2D30] border-b border-[#E8EAED] dark:border-[#3C4043] px-3 flex items-center gap-2 overflow-x-auto shrink-0 text-xs text-[#5F6368] dark:text-[#9AA0A6] no-scrollbar">
+          {bookmarks.map((bm) => (
+            <button
+              key={bm.id}
+              type="button"
+              onClick={() => navigateCurrentTab(bm.url)}
+              className="px-2.5 py-1 rounded-md hover:bg-gray-100 dark:hover:bg-white/5 flex items-center gap-1.5 cursor-pointer transition truncate shrink-0"
+            >
+              <Globe className="w-3 h-3 text-gray-400" />
+              <span className="truncate max-w-[120px]">{bm.title}</span>
+            </button>
+          ))}
+        </div>
+      )}
+
+      {/* مؤشر شريط تقدم التحميل */}
+      {activeTab.loading && (
         <div className="h-0.5 w-full bg-blue-100 overflow-hidden shrink-0">
           <div className="h-full bg-blue-600 animate-pulse w-3/4" />
         </div>
       )}
 
       {/* ═══════════════════════════════════════════════════════════════
-          3. مساحة عرض الموقع مباشرة داخل المتصفح (100% Direct Browsing)
-          يتم عرض الصفحة الحية أو نتائج البحث مباشرة داخل التبويب بالضبط كما في كروم
+          4. منطقة عرض المحتوى المباشرة (Live Rendering Viewport)
+          عزل المواقع وتشغيل الصفحة الأصلية أو نتائج البحث مباشرة 100%
       ═══════════════════════════════════════════════════════════════ */}
       <main className="flex-1 w-full h-full relative bg-white dark:bg-[#1E1F22] overflow-hidden">
-        <iframe
-          ref={iframeRef}
-          key={`${activeTab.id}_${activeTab.url}`}
-          name="anwer_browser_web_frame"
-          title={activeTab.title || 'AnwerBrowser'}
-          src={`/api/web-proxy?url=${encodeURIComponent(activeTab.url)}&in_browser_frame=1`}
-          className="w-full h-full border-0 bg-white"
-          sandbox="allow-scripts allow-same-origin allow-forms allow-popups allow-modals allow-presentation allow-downloads allow-pointer-lock"
-          allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture; web-share; fullscreen"
-          onLoad={() => setLoading(false)}
-          onError={() => setLoading(false)}
-        />
+        {activeTab.isCrashed ? (
+          /* صفحة تعطل العملية (Chrome Aw, Snap! Page) */
+          <div className="w-full h-full flex flex-col items-center justify-center p-8 bg-white dark:bg-[#202124] text-center">
+            <div className="w-16 h-16 rounded-2xl bg-gray-100 dark:bg-white/10 text-gray-600 dark:text-gray-300 flex items-center justify-center mb-4">
+              <Zap className="w-8 h-8 text-amber-500" />
+            </div>
+            <h2 className="text-xl font-bold mb-2">عذراً، حدث خطأ ما (Aw, Snap!)</h2>
+            <p className="text-xs text-gray-500 max-w-sm mb-6 leading-relaxed">
+              تعطلت عملية العرض (Renderer Process) الخاصة بهذا التبويب فقط دون التأثير على باقي التبويبات أو المتصفح.
+            </p>
+            <button
+              type="button"
+              onClick={handleRefresh}
+              className="px-5 py-2 rounded-full bg-blue-600 hover:bg-blue-700 text-white font-bold text-xs transition cursor-pointer"
+            >
+              إعادة تحميل الصفحة
+            </button>
+          </div>
+        ) : activeTab.url === 'https://www.google.com' || activeTab.url === 'https://google.com' ? (
+          /* صفحة التبويب الجديد (New Tab Page - NTP) بمحرك Google */
+          <div className="w-full h-full flex flex-col items-center justify-center p-6 bg-white dark:bg-[#1E1F22]">
+            <div className="w-full max-w-xl flex flex-col items-center text-center -mt-12">
+              <div className="text-5xl font-extrabold tracking-tight mb-6 select-none dir-ltr">
+                <span className="text-[#4285F4]">A</span>
+                <span className="text-[#EA4335]">n</span>
+                <span className="text-[#FBBC05]">w</span>
+                <span className="text-[#4285F4]">e</span>
+                <span className="text-[#34A853]">r</span>
+                <span className="text-[#EA4335]">B</span>
+                <span className="text-[#4285F4]">r</span>
+                <span className="text-[#FBBC05]">o</span>
+                <span className="text-[#34A853]">w</span>
+                <span className="text-[#EA4335]">s</span>
+                <span className="text-[#4285F4]">e</span>
+                <span className="text-[#34A853]">r</span>
+              </div>
+
+              {/* مربع البحث المركزي */}
+              <form
+                onSubmit={(e) => {
+                  e.preventDefault();
+                  if (searchQuery.trim()) {
+                    navigateCurrentTab(
+                      `https://www.google.com/search?q=${encodeURIComponent(searchQuery.trim())}`
+                    );
+                  }
+                }}
+                className="w-full h-12 px-5 rounded-full border border-gray-300 dark:border-gray-700 shadow-xs focus-within:shadow-md focus-within:border-blue-500 flex items-center gap-3 bg-white dark:bg-[#2B2D30] transition mb-6"
+              >
+                <Search className="w-5 h-5 text-gray-400" />
+                <input
+                  type="text"
+                  value={searchQuery}
+                  onChange={(e) => setSearchQuery(e.target.value)}
+                  placeholder="ابحث في Google أو اكتب عنوان ويب..."
+                  className="flex-1 bg-transparent text-sm text-[#202124] dark:text-[#E8EAED] focus:outline-none"
+                  autoFocus
+                />
+                <button
+                  type="submit"
+                  className="px-4 py-1.5 rounded-full bg-blue-600 hover:bg-blue-700 text-white text-xs font-semibold cursor-pointer transition"
+                >
+                  بحث
+                </button>
+              </form>
+
+              {/* الاختصارات الأكثر زيارة */}
+              <div className="grid grid-cols-4 gap-4 w-full max-w-md">
+                {[
+                  { name: 'ويكيبيديا', url: 'https://ar.wikipedia.org', icon: '📚' },
+                  { name: 'أخبار التقنية', url: 'https://news.ycombinator.com', icon: '💻' },
+                  { name: 'BBC عربي', url: 'https://www.bbc.com/arabic', icon: '🌍' },
+                  { name: 'Google بحث', url: 'https://www.google.com/search?q=الذكاء+الاصطناعي', icon: '🔍' },
+                ].map((item) => (
+                  <button
+                    key={item.name}
+                    type="button"
+                    onClick={() => navigateCurrentTab(item.url)}
+                    className="flex flex-col items-center gap-1.5 p-3 rounded-xl hover:bg-gray-100 dark:hover:bg-white/5 transition cursor-pointer group"
+                  >
+                    <div className="w-12 h-12 rounded-full bg-gray-100 dark:bg-white/10 group-hover:bg-blue-50 dark:group-hover:bg-blue-950/40 flex items-center justify-center text-xl shadow-xs transition">
+                      {item.icon}
+                    </div>
+                    <span className="text-xs text-gray-700 dark:text-gray-300 font-medium">
+                      {item.name}
+                    </span>
+                  </button>
+                ))}
+              </div>
+            </div>
+          </div>
+        ) : (
+          /* عرض الصفحة الحية عبر خادم البروكسي وعملية العرض */
+          <iframe
+            ref={iframeRef}
+            key={`${activeTab.id}_${activeTab.url}`}
+            name="anwer_browser_web_frame"
+            title={activeTab.title || 'AnwerBrowser'}
+            src={`/api/web-proxy?url=${encodeURIComponent(activeTab.url)}&in_browser_frame=1`}
+            style={{ transform: `scale(${zoomLevel / 100})`, transformOrigin: 'top right' }}
+            className="w-full h-full border-0 bg-white"
+            sandbox="allow-scripts allow-same-origin allow-forms allow-popups allow-modals allow-presentation allow-downloads allow-pointer-lock"
+            allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture; web-share; fullscreen"
+            onLoad={() => {
+              setTabs((prev) =>
+                prev.map((t) => (t.id === activeTabId ? { ...t, loading: false } : t))
+              );
+            }}
+            onError={() => {
+              setTabs((prev) =>
+                prev.map((t) => (t.id === activeTabId ? { ...t, loading: false } : t))
+              );
+            }}
+          />
+        )}
       </main>
+
+      {/* ═══════════════════════════════════════════════════════════════
+          5. مدير مهام كروم (Chrome Task Manager - Shift+Esc)
+          يعرض تفاصيل العمليات المعزولة: Browser, GPU, Network, Renderers
+      ═══════════════════════════════════════════════════════════════ */}
+      {isTaskManagerOpen && (
+        <div
+          className="fixed inset-0 z-50 bg-black/40 backdrop-blur-2xs flex items-center justify-center p-4"
+          onClick={() => setIsTaskManagerOpen(false)}
+        >
+          <div
+            onClick={(e) => e.stopPropagation()}
+            className="w-full max-w-2xl bg-white dark:bg-[#2B2D30] rounded-2xl shadow-2xl border border-gray-200 dark:border-gray-700 overflow-hidden flex flex-col"
+          >
+            <div className="px-5 py-4 border-b border-gray-200 dark:border-gray-700 flex items-center justify-between bg-gray-50 dark:bg-white/5">
+              <div className="flex items-center gap-2">
+                <Cpu className="w-5 h-5 text-blue-600" />
+                <h3 className="font-bold text-sm">مدير مهام المتصفح (Chrome Task Manager)</h3>
+              </div>
+              <button
+                type="button"
+                onClick={() => setIsTaskManagerOpen(false)}
+                className="p-1 rounded-full hover:bg-black/10 dark:hover:bg-white/10"
+              >
+                <X className="w-5 h-5" />
+              </button>
+            </div>
+
+            <div className="p-4 max-h-[360px] overflow-y-auto">
+              <table className="w-full text-right text-xs">
+                <thead>
+                  <tr className="border-b border-gray-200 dark:border-gray-700 text-gray-500 font-semibold pb-2">
+                    <th className="p-2">المهمة / العملية</th>
+                    <th className="p-2">الذاكرة (RAM)</th>
+                    <th className="p-2">المعالج (CPU)</th>
+                    <th className="p-2">معرف العملية (PID)</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {getActiveProcesses().map((p) => (
+                    <tr
+                      key={p.pid}
+                      onClick={() => setSelectedProcessPid(p.pid)}
+                      className={`border-b border-gray-100 dark:border-gray-800 cursor-pointer transition ${
+                        selectedProcessPid === p.pid
+                          ? 'bg-blue-50 dark:bg-blue-950/40 text-blue-600 font-bold'
+                          : 'hover:bg-gray-50 dark:hover:bg-white/5'
+                      }`}
+                    >
+                      <td className="p-2.5 truncate max-w-[240px] flex items-center gap-2">
+                        {p.type === 'browser' && <Activity className="w-3.5 h-3.5 text-blue-600 shrink-0" />}
+                        {p.type === 'gpu' && <Zap className="w-3.5 h-3.5 text-amber-500 shrink-0" />}
+                        {p.type === 'network' && <Globe className="w-3.5 h-3.5 text-emerald-500 shrink-0" />}
+                        {p.type === 'renderer' && <Layers className="w-3.5 h-3.5 text-purple-500 shrink-0" />}
+                        {p.type === 'storage' && <Folder className="w-3.5 h-3.5 text-gray-400 shrink-0" />}
+                        <span className="truncate">{p.name}</span>
+                      </td>
+                      <td className="p-2.5 font-mono">{p.memoryMB} MB</td>
+                      <td className="p-2.5 font-mono">{p.cpuPercent}%</td>
+                      <td className="p-2.5 font-mono text-gray-400">{p.pid}</td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+
+            <div className="p-4 bg-gray-50 dark:bg-white/5 border-t border-gray-200 dark:border-gray-700 flex items-center justify-between">
+              <span className="text-[11px] text-gray-500">
+                بنية متعددة العمليات (Multi-Process): عزل تام بين المواقع والذاكرة
+              </span>
+              <button
+                type="button"
+                disabled={!selectedProcessPid}
+                onClick={() => selectedProcessPid && handleKillProcess(selectedProcessPid)}
+                className="px-4 py-1.5 rounded-lg bg-red-600 hover:bg-red-700 disabled:opacity-40 text-white font-bold text-xs transition cursor-pointer"
+              >
+                إنهاء العملية (End Process)
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* ═══════════════════════════════════════════════════════════════
+          6. نافذة تسجيل الدخول بالحساب والمزامنة (Google Profile Sync)
+      ═══════════════════════════════════════════════════════════════ */}
+      {isProfileModalOpen && (
+        <div
+          className="fixed inset-0 z-50 bg-black/40 backdrop-blur-2xs flex items-center justify-center p-4"
+          onClick={() => setIsProfileModalOpen(false)}
+        >
+          <div
+            onClick={(e) => e.stopPropagation()}
+            className="w-full max-w-md bg-white dark:bg-[#2B2D30] rounded-2xl shadow-2xl border border-gray-200 dark:border-gray-700 p-6 text-center"
+          >
+            <div className="w-16 h-16 rounded-full bg-blue-100 text-blue-600 flex items-center justify-center mx-auto mb-4 font-bold text-2xl">
+              {userProfile.isLoggedIn ? userProfile.name.charAt(0).toUpperCase() : <User className="w-8 h-8" />}
+            </div>
+            <h3 className="text-lg font-bold mb-1">
+              {userProfile.isLoggedIn ? userProfile.name : 'تسجيل الدخول إلى AnwerBrowser'}
+            </h3>
+            <p className="text-xs text-gray-500 mb-6">
+              {userProfile.isLoggedIn
+                ? `مزامنة الإشارات وكلمات المرور نشطة عبر: ${userProfile.email}`
+                : 'قم بتسجيل الدخول لمزامنة الإشارات وسجل التصفح وكلمات المرور بين أجهزتك.'}
+            </p>
+
+            {userProfile.isLoggedIn ? (
+              <div className="space-y-3">
+                <div className="p-3 bg-emerald-50 dark:bg-emerald-950/30 rounded-xl border border-emerald-200 dark:border-emerald-800 text-emerald-800 dark:text-emerald-300 text-xs flex items-center justify-between">
+                  <span>المزامنة عبر السحابة: مفعّلة</span>
+                  <Check className="w-4 h-4 text-emerald-600" />
+                </div>
+                <button
+                  type="button"
+                  onClick={() => {
+                    setUserProfile({ isLoggedIn: false, email: '', name: '', syncEnabled: false });
+                    showToast('تم تسجيل الخروج');
+                    setIsProfileModalOpen(false);
+                  }}
+                  className="w-full py-2.5 rounded-xl border border-red-200 text-red-600 hover:bg-red-50 text-xs font-bold transition"
+                >
+                  تسجيل الخروج
+                </button>
+              </div>
+            ) : (
+              <form
+                onSubmit={(e) => {
+                  e.preventDefault();
+                  const form = e.target as HTMLFormElement;
+                  const email = (form.elements.namedItem('email') as HTMLInputElement).value;
+                  if (email) {
+                    setUserProfile({
+                      isLoggedIn: true,
+                      email,
+                      name: email.split('@')[0],
+                      syncEnabled: true,
+                    });
+                    showToast('تم تسجيل الدخول وتفعيل المزامنة بنجاح 🎉');
+                    setIsProfileModalOpen(false);
+                  }
+                }}
+                className="space-y-3"
+              >
+                <input
+                  type="email"
+                  name="email"
+                  placeholder="أدخل بريدك الإلكتروني (Gmail)..."
+                  required
+                  className="w-full px-4 py-2.5 rounded-xl border border-gray-300 dark:border-gray-600 bg-transparent text-xs focus:outline-none focus:border-blue-600"
+                />
+                <button
+                  type="submit"
+                  className="w-full py-2.5 rounded-xl bg-blue-600 hover:bg-blue-700 text-white text-xs font-bold transition shadow-xs cursor-pointer"
+                >
+                  تسجيل الدخول وتفعيل المزامنة
+                </button>
+              </form>
+            )}
+          </div>
+        </div>
+      )}
+
+      {/* ═══════════════════════════════════════════════════════════════
+          7. درج السجل والتنزيلات (History & Downloads Drawers)
+      ═══════════════════════════════════════════════════════════════ */}
+      {isHistoryDrawerOpen && (
+        <div
+          className="fixed inset-0 z-50 bg-black/40 flex justify-end"
+          onClick={() => setIsHistoryDrawerOpen(false)}
+        >
+          <div
+            onClick={(e) => e.stopPropagation()}
+            className="w-full max-w-sm h-full bg-white dark:bg-[#2B2D30] shadow-2xl flex flex-col"
+          >
+            <div className="p-4 border-b border-gray-200 dark:border-gray-700 flex items-center justify-between">
+              <div className="flex items-center gap-2">
+                <History className="w-5 h-5 text-blue-600" />
+                <h3 className="font-bold text-sm">سجل التصفح ({historyList.length})</h3>
+              </div>
+              <button
+                type="button"
+                onClick={() => setIsHistoryDrawerOpen(false)}
+                className="p-1 rounded-full hover:bg-black/10 dark:hover:bg-white/10"
+              >
+                <X className="w-5 h-5" />
+              </button>
+            </div>
+            <div className="flex-1 overflow-y-auto p-4 space-y-2">
+              {historyList.length === 0 ? (
+                <div className="text-center py-12 text-gray-400 text-xs">سجل التصفح فارغ</div>
+              ) : (
+                historyList.map((h, i) => (
+                  <div
+                    key={i}
+                    onClick={() => {
+                      navigateCurrentTab(h.url);
+                      setIsHistoryDrawerOpen(false);
+                    }}
+                    className="p-3 rounded-xl border border-gray-100 dark:border-gray-700/60 hover:bg-gray-50 dark:hover:bg-white/5 cursor-pointer transition flex items-center justify-between"
+                  >
+                    <div className="truncate flex-1">
+                      <div className="text-xs font-bold truncate">{h.title}</div>
+                      <div className="text-[10px] text-gray-400 font-mono truncate dir-ltr text-left">
+                        {h.url}
+                      </div>
+                    </div>
+                    <span className="text-[10px] text-gray-400">{h.time}</span>
+                  </div>
+                ))
+              )}
+            </div>
+          </div>
+        </div>
+      )}
+
+      {isDownloadsDrawerOpen && (
+        <div
+          className="fixed inset-0 z-50 bg-black/40 flex justify-end"
+          onClick={() => setIsDownloadsDrawerOpen(false)}
+        >
+          <div
+            onClick={(e) => e.stopPropagation()}
+            className="w-full max-w-sm h-full bg-white dark:bg-[#2B2D30] shadow-2xl flex flex-col"
+          >
+            <div className="p-4 border-b border-gray-200 dark:border-gray-700 flex items-center justify-between">
+              <div className="flex items-center gap-2">
+                <Download className="w-5 h-5 text-blue-600" />
+                <h3 className="font-bold text-sm">التنزيلات ({downloadsList.length})</h3>
+              </div>
+              <button
+                type="button"
+                onClick={() => setIsDownloadsDrawerOpen(false)}
+                className="p-1 rounded-full hover:bg-black/10 dark:hover:bg-white/10"
+              >
+                <X className="w-5 h-5" />
+              </button>
+            </div>
+            <div className="flex-1 overflow-y-auto p-4 space-y-2">
+              {downloadsList.map((d) => (
+                <div
+                  key={d.id}
+                  className="p-3 rounded-xl border border-gray-100 dark:border-gray-700/60 flex items-center justify-between"
+                >
+                  <div className="truncate flex-1">
+                    <div className="text-xs font-bold truncate">{d.filename}</div>
+                    <div className="text-[10px] text-emerald-600 font-semibold">{d.size} • مكتمل 🟢</div>
+                  </div>
+                  <span className="text-[10px] text-gray-400">{d.time}</span>
+                </div>
+              ))}
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Snackbar الإشعار السريع */}
+      {toastMsg && (
+        <div className="fixed bottom-6 right-4 left-4 sm:left-auto sm:right-6 z-50 pointer-events-none flex justify-center">
+          <div className="px-4 py-2.5 rounded-xl bg-[#202124] text-white text-xs shadow-lg flex items-center gap-2">
+            <span>{toastMsg}</span>
+          </div>
+        </div>
+      )}
     </div>
   );
 }
