@@ -2635,6 +2635,18 @@ ${trimmed.slice(0, 12000)}`;
           const isPdfIntent = /pdf|filetype:pdf|مستند|بحث علمي|رسالة ماجستير|تحميل pdf|ملف/.test(qLower);
           const isAudioIntent = /mp3|أصوات|صوت|صوتيات|استماع|أغنية mp3|نغمة|تسجيل|audio|sound|podcast/.test(qLower);
           
+          // وضع البحث المحدد في المسار (mode / tbm) لربط الروابط والمسارات الحقيقية الفعلية
+          const rawModeParam = (u.searchParams.get('mode') || u.searchParams.get('tbm') || '').toLowerCase().trim();
+          let initialMode = 'all';
+          if (rawModeParam === 'ai' || rawModeParam === 'gemini') initialMode = 'ai';
+          else if (rawModeParam === 'vid' || rawModeParam === 'videos' || rawModeParam === 'video') initialMode = 'videos';
+          else if (rawModeParam === 'isch' || rawModeParam === 'images' || rawModeParam === 'image') initialMode = 'images';
+          else if (rawModeParam === 'shorts' || rawModeParam === 'short') initialMode = 'shorts';
+          else if (rawModeParam === 'nws' || rawModeParam === 'news') initialMode = 'news';
+          else if (rawModeParam === 'bks' || rawModeParam === 'books') initialMode = 'books';
+          else if (rawModeParam === 'pdf') initialMode = 'pdf';
+          else if (rawModeParam === 'audios' || rawModeParam === 'audio' || rawModeParam === 'mp3') initialMode = 'audios';
+          
           res.setHeader('Content-Type', 'text/html; charset=utf-8');
           res.send(`<!DOCTYPE html>
 <html dir="rtl" lang="ar">
@@ -3222,40 +3234,40 @@ ${trimmed.slice(0, 12000)}`;
     </form>
   </div>
 
-  <!-- 3. شريط التصنيفات (أوضاع البحث - Search Modes) - يظهر ديناميكياً حسب نية البحث -->
+  <!-- 3. شريط التصنيفات (أوضاع البحث - Search Modes) - يظهر ديناميكياً حسب نية البحث ومربوط بمسارات حقيقية -->
   <nav class="modes-bar">
-    <button type="button" class="mode-tab active" onclick="switchMode('all')">
+    <button type="button" class="mode-tab ${initialMode === 'all' ? 'active' : ''}" data-mode="all" onclick="navigateToMode('all')">
       <span>🌐</span><span>الكل</span>
     </button>
-    <button type="button" class="mode-tab" onclick="switchMode('ai')">
+    <button type="button" class="mode-tab ${initialMode === 'ai' ? 'active' : ''}" data-mode="ai" onclick="navigateToMode('ai')">
       <span class="ai-sparkle">✨</span><span>وضع AI</span>
     </button>
-    <button type="button" class="mode-tab" onclick="switchMode('videos')">
+    <button type="button" class="mode-tab ${initialMode === 'videos' ? 'active' : ''}" data-mode="videos" onclick="navigateToMode('videos')">
       <span>🎬</span><span>فيديوهات</span>
     </button>
-    <button type="button" class="mode-tab" onclick="switchMode('images')">
+    <button type="button" class="mode-tab ${initialMode === 'images' ? 'active' : ''}" data-mode="images" onclick="navigateToMode('images')">
       <span>🖼️</span><span>صور</span>
     </button>
-    <button type="button" class="mode-tab" onclick="switchMode('shorts')">
+    <button type="button" class="mode-tab ${initialMode === 'shorts' ? 'active' : ''}" data-mode="shorts" onclick="navigateToMode('shorts')">
       <span>⚡</span><span>فيديوهات قصيرة</span>
     </button>
-    <button type="button" class="mode-tab" onclick="switchMode('news')">
+    <button type="button" class="mode-tab ${initialMode === 'news' ? 'active' : ''}" data-mode="news" onclick="navigateToMode('news')">
       <span>📰</span><span>أخبار</span>
     </button>
 
     <!-- تظهر الأوضاع التالية ديناميكياً إذا كانت نية البحث تتطلبها -->
     ${isBooksIntent ? `
-    <button type="button" class="mode-tab" onclick="switchMode('books')">
+    <button type="button" class="mode-tab ${initialMode === 'books' ? 'active' : ''}" data-mode="books" onclick="navigateToMode('books')">
       <span>📚</span><span>كتب</span>
     </button>` : ''}
 
     ${isPdfIntent ? `
-    <button type="button" class="mode-tab" onclick="switchMode('pdf')">
+    <button type="button" class="mode-tab ${initialMode === 'pdf' ? 'active' : ''}" data-mode="pdf" onclick="navigateToMode('pdf')">
       <span>📄</span><span>PDF</span>
     </button>` : ''}
 
     ${isAudioIntent ? `
-    <button type="button" class="mode-tab" onclick="switchMode('audios')">
+    <button type="button" class="mode-tab ${initialMode === 'audios' ? 'active' : ''}" data-mode="audios" onclick="navigateToMode('audios')">
       <span>🎵</span><span>أصوات</span>
     </button>` : ''}
 
@@ -3265,9 +3277,9 @@ ${trimmed.slice(0, 12000)}`;
       <span>➕</span><span>المزيد</span>
     </button>
     <span id="extra-modes" style="display:none;display:flex;align-items:center;gap:8px;">
-      ${!isBooksIntent ? `<button type="button" class="mode-tab" onclick="switchMode('books')"><span>📚</span><span>كتب</span></button>` : ''}
-      ${!isPdfIntent ? `<button type="button" class="mode-tab" onclick="switchMode('pdf')"><span>📄</span><span>PDF</span></button>` : ''}
-      ${!isAudioIntent ? `<button type="button" class="mode-tab" onclick="switchMode('audios')"><span>🎵</span><span>أصوات</span></button>` : ''}
+      ${!isBooksIntent ? `<button type="button" class="mode-tab ${initialMode === 'books' ? 'active' : ''}" data-mode="books" onclick="navigateToMode('books')"><span>📚</span><span>كتب</span></button>` : ''}
+      ${!isPdfIntent ? `<button type="button" class="mode-tab ${initialMode === 'pdf' ? 'active' : ''}" data-mode="pdf" onclick="navigateToMode('pdf')"><span>📄</span><span>PDF</span></button>` : ''}
+      ${!isAudioIntent ? `<button type="button" class="mode-tab ${initialMode === 'audios' ? 'active' : ''}" data-mode="audios" onclick="navigateToMode('audios')"><span>🎵</span><span>أصوات</span></button>` : ''}
     </span>` : ''}
   </nav>
 
@@ -3838,8 +3850,13 @@ ${trimmed.slice(0, 12000)}`;
     // تبديل أوضاع وتصنيفات البحث (Search Modes)
     function switchMode(mode) {
       var tabs = document.querySelectorAll('.mode-tab');
-      tabs.forEach(function(t) { t.classList.remove('active'); });
-      if (window.event && window.event.currentTarget) window.event.currentTarget.classList.add('active');
+      tabs.forEach(function(t) {
+        if (t.getAttribute('data-mode') === mode) {
+          t.classList.add('active');
+        } else {
+          t.classList.remove('active');
+        }
+      });
 
       var aiSec = document.getElementById('ai-overview-section');
       var vidSec = document.getElementById('videos-section');
@@ -3905,6 +3922,38 @@ ${trimmed.slice(0, 12000)}`;
         if (appSec) appSec.style.display = 'none';
         if (audiosSec) { audiosSec.style.display = 'block'; audiosSec.scrollIntoView({ behavior: 'smooth' }); }
       }
+    }
+
+    // التنقل الحقيقي للوضع عبر مسارات Google ومطابقتها في المتصفح
+    function navigateToMode(mode) {
+      switchMode(mode);
+      var q = document.getElementById('sq').value.trim() || ${JSON.stringify(searchQ)};
+      var modeParamMap = {
+        'all': '',
+        'ai': '&mode=ai',
+        'videos': '&tbm=vid',
+        'images': '&tbm=isch',
+        'shorts': '&mode=shorts',
+        'news': '&tbm=nws',
+        'books': '&tbm=bks',
+        'pdf': '&mode=pdf',
+        'audios': '&mode=audios'
+      };
+      var targetUrl = 'https://www.google.com/search?q=' + encodeURIComponent(q) + (modeParamMap[mode] || '');
+      // تحديث رابط شريط المتصفح وتأكيد المسار الحقيقي
+      window.parent.postMessage({
+        type: 'HYBRID_BROWSER_PAGE_META',
+        url: targetUrl,
+        title: q + ' - ' + (mode === 'all' ? 'بحث Google' : mode + ' Google'),
+        textContent: document.body ? document.body.innerText : ''
+      }, '*');
+    }
+
+    // تفعيل الوضع الأولي المطلوب عند التحميل
+    if (${JSON.stringify(initialMode)} !== 'all') {
+      setTimeout(function() {
+        switchMode(${JSON.stringify(initialMode)});
+      }, 50);
     }
 
     function expandAiAnswer() {

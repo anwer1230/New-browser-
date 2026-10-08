@@ -182,6 +182,63 @@ export const HybridBrowserWorkspace: React.FC<HybridBrowserWorkspaceProps> = ({
   const [currentPageText, setCurrentPageText] = useState<string>('');
   const [darkMode, setDarkMode] = useState<boolean>(false);
 
+  // ═══ Real Device Status Bar State (Time, Battery API, Network Info) ═══
+  const [deviceTime, setDeviceTime] = useState<string>(() => {
+    const d = new Date();
+    return d.toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit', hour12: false });
+  });
+  const [batteryLevel, setBatteryLevel] = useState<number>(100);
+  const [isCharging, setIsCharging] = useState<boolean>(false);
+  const [networkType, setNetworkType] = useState<string>('5G');
+
+  useEffect(() => {
+    // 1. Live Real Device Clock
+    const timer = setInterval(() => {
+      const d = new Date();
+      setDeviceTime(d.toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit', hour12: false }));
+    }, 1000);
+
+    // 2. Real Battery API (Navigator.getBattery)
+    interface BatteryManager extends EventTarget {
+      level: number;
+      charging: boolean;
+      addEventListener: (type: string, listener: EventListener) => void;
+      removeEventListener: (type: string, listener: EventListener) => void;
+    }
+    const nav = navigator as unknown as { getBattery?: () => Promise<BatteryManager> };
+    if (nav.getBattery) {
+      nav.getBattery().then((bm) => {
+        setBatteryLevel(Math.round(bm.level * 100));
+        setIsCharging(bm.charging);
+        const onLevelChange = () => setBatteryLevel(Math.round(bm.level * 100));
+        const onChargingChange = () => setIsCharging(bm.charging);
+        bm.addEventListener('levelchange', onLevelChange);
+        bm.addEventListener('chargingchange', onChargingChange);
+      }).catch(() => {});
+    }
+
+    // 3. Real Network Connection Info
+    interface NetworkInformation {
+      effectiveType?: string;
+      type?: string;
+      addEventListener?: (type: string, listener: EventListener) => void;
+    }
+    const conn = (navigator as unknown as { connection?: NetworkInformation }).connection;
+    if (conn) {
+      const updateNet = () => {
+        if (conn.effectiveType) {
+          setNetworkType(conn.effectiveType.toUpperCase()); // '4G', '3G', '5G'
+        }
+      };
+      updateNet();
+      if (conn.addEventListener) {
+        conn.addEventListener('change', updateNet);
+      }
+    }
+
+    return () => clearInterval(timer);
+  }, []);
+
   // ═══ Background Services State (Always-On Auto-Translate & Turbo 100x Speed) ═══
   const [autoTranslate, setAutoTranslate] = useState<boolean>(true);
   const [isOnline, setIsOnline] = useState<boolean>(() => typeof navigator !== 'undefined' ? navigator.onLine : true);
@@ -900,16 +957,34 @@ export const HybridBrowserWorkspace: React.FC<HybridBrowserWorkspaceProps> = ({
           darkMode ? 'bg-[#202124] border-[#303134] text-[#E8EAED]' : 'bg-[#F8F9FA] border-[#E8EAED] text-[#3C4043]'
         }`}
       >
-        <div className="font-semibold text-[13px] tracking-tight font-sans" dir="ltr">12:30</div>
+        <div className="font-semibold text-[13px] tracking-tight font-sans" dir="ltr">{deviceTime}</div>
         <div className="flex items-center gap-2 font-sans" dir="ltr">
-          <span className="text-[11px] font-bold tracking-wider">5G</span>
-          <svg className="w-3.5 h-3.5" viewBox="0 0 24 24" fill="currentColor">
-            <path d="M12 3C7.5 3 3.5 4.8 0.5 7.7L12 21.5L23.5 7.7C20.5 4.8 16.5 3 12 3Z"/>
-          </svg>
-          <div className="flex items-center gap-0.5">
-            <span className="text-[11px] font-medium">100%</span>
-            <div className="w-5 h-2.5 border border-current rounded-xs p-0.5 flex items-center">
-              <div className="w-full h-full bg-current rounded-2xs" />
+          <span className="text-[11px] font-bold tracking-wider">{isOnline ? networkType : 'لا يوجد شبكة'}</span>
+          {isOnline ? (
+            <svg className="w-3.5 h-3.5 text-current" viewBox="0 0 24 24" fill="currentColor">
+              <path d="M12 3C7.5 3 3.5 4.8 0.5 7.7L12 21.5L23.5 7.7C20.5 4.8 16.5 3 12 3Z"/>
+            </svg>
+          ) : (
+            <svg className="w-3.5 h-3.5 text-[#EA4335]" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+              <line x1="1" y1="1" x2="23" y2="23" />
+              <path d="M16.72 11.06A10.94 10.94 0 0 1 19 12.55" />
+              <path d="M5 12.55a10.94 10.94 0 0 1 5.17-2.39" />
+              <path d="M10.71 5.05A16 16 0 0 1 22.58 9" />
+              <path d="M1.42 9a15.91 15.91 0 0 1 4.7-2.88" />
+              <path d="M8.53 16.11a6 6 0 0 1 6.95 0" />
+              <line x1="12" y1="20" x2="12.01" y2="20" />
+            </svg>
+          )}
+          <div className="flex items-center gap-1">
+            {isCharging && <span className="text-[11px] text-[#34A853]">⚡</span>}
+            <span className="text-[11px] font-medium">{batteryLevel}%</span>
+            <div className="w-5 h-2.5 border border-current rounded-xs p-0.5 flex items-center relative">
+              <div
+                className={`h-full rounded-2xs transition-all ${
+                  batteryLevel <= 20 ? 'bg-[#EA4335]' : 'bg-current'
+                }`}
+                style={{ width: `${Math.max(10, Math.min(100, batteryLevel))}%` }}
+              />
             </div>
           </div>
         </div>
