@@ -1,7 +1,7 @@
 services:
   # 1. الخدمة الرئيسية الشاملة (واجهة المتصفح الموحّد + خادم الترجمة والـ Proxy وقاعدة البيانات)
   - type: web
-    name: anwerbrowser
+    name: new-browser-unified
     runtime: node
     plan: free
     region: frankfurt
@@ -21,7 +21,7 @@ services:
 
   # 2. خادم Python FastAPI المستقل للترجمة والذكاء الاصطناعي (اختياري لتطبيق Flutter)
   - type: web
-    name: anwerbrowser-python-api
+    name: new-browser-python-api
     runtime: python
     plan: free
     region: frankfurt

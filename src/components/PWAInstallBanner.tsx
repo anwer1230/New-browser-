@@ -72,7 +72,7 @@ export const PWAInstallBanner: React.FC<PWAInstallBannerProps> = ({ onInstalled 
             <div className="w-10 h-10 rounded-xl bg-white/10 backdrop-blur-md p-1 border border-white/20 shrink-0 flex items-center justify-center shadow-inner">
               <img
                 src="/icon.svg"
-                alt="AnwerBrowser"
+                alt="Hybrid AI"
                 className="w-full h-full object-contain drop-shadow"
                 onError={(e) => {
                   (e.currentTarget as HTMLImageElement).style.display = 'none';
@@ -84,7 +84,7 @@ export const PWAInstallBanner: React.FC<PWAInstallBannerProps> = ({ onInstalled 
             <div className="min-w-0">
               <div className="flex items-center gap-2">
                 <span className="font-bold text-[14px] sm:text-[15px] truncate">
-                  تثبيت AnwerBrowser كـ تطبيق (PWA)
+                  تثبيت Hybrid AI System كـ تطبيق (PWA)
                 </span>
                 <span className="hidden sm:inline-block px-2 py-0.5 rounded-full bg-white/20 text-[11px] font-medium tracking-wide">
                   تطبيق مستقل

@@ -5,11 +5,11 @@ import 'screens/home_screen.dart';
 import 'theme/app_theme.dart';
 
 void main() {
-  runApp(const AnwerBrowserAIApp());
+  runApp(const HybridAIApp());
 }
 
-class AnwerBrowserAIApp extends StatelessWidget {
-  const AnwerBrowserAIApp({super.key});
+class HybridAIApp extends StatelessWidget {
+  const HybridAIApp({super.key});
 
   @override
   Widget build(BuildContext context) {
@@ -18,7 +18,7 @@ class AnwerBrowserAIApp extends StatelessWidget {
         ChangeNotifierProvider(create: (_) => ChatProvider()..init()),
       ],
       child: MaterialApp(
-        title: 'AnwerBrowser',
+        title: 'Hybrid AI',
         debugShowCheckedModeBanner: false,
         theme: AppTheme.light,
         darkTheme: AppTheme.dark,

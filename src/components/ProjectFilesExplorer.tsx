@@ -17,7 +17,7 @@ const FINAL_CHECKLIST = [
   { id: 'redis', label: 'Redis يعمل: PING → PONG للذاكرة المؤقتة (Cache TTL 3600s) وسياق الجلسات' },
   { id: 'rag', label: 'RAG يحتوي مستندات: python ingest.py --stats يعرض المقاطع المضافة' },
   { id: 'media', label: 'خادم الوسائط والترجمة (media_server.py): بحث yt-dlp + تفريغ Whisper + ترجمة فورية وتوليد ملفات SRT' },
-  { id: 'browser', label: 'متصفح AnwerBrowser للجوال (hybrid_browser/): WebView + مشغل فيديو مع طبقة ترجمة SRT + وضع Offline + مزامنة الأجهزة' },
+  { id: 'browser', label: 'متصفح AI الهجين للجوال (hybrid_browser/): WebView + مشغل فيديو مع طبقة ترجمة SRT + وضع Offline + مزامنة الأجهزة' },
   { id: 'memory', label: 'الذاكرة طويلة المدى تعمل وتحفظ سياق الحوار وسجل المشاهدة وإعدادات الخادم في Firestore' },
 ];
 

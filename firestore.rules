@@ -241,10 +241,5 @@ service cloud.firestore {
       allow update: if false;
       allow delete: if isSignedIn() && isValidId(pageId) && existing().ownerId == request.auth.uid;
     }
-
-    // Connection Health Verification
-    match /test/{docId} {
-      allow read: if true;
-    }
   }
 }
